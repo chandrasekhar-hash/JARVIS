@@ -1,0 +1,971 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useAssistantConfig } from '../context/AssistantConfigContext';
+import './Navbar.css';
+
+export default function Navbar({
+  blobColor,
+  setBlobColor,
+  blobSize,
+  setBlobSize,
+  isDraggable,
+  setIsDraggable,
+  blobPosition,
+  setBlobPosition,
+  jarvisFont,
+  setJarvisFont,
+  jarvisColor,
+  setJarvisColor,
+  jarvisFontSize,
+  setJarvisFontSize,
+  jarvisTextPosition,
+  setJarvisTextPosition,
+  isTextDraggable,
+  setIsTextDraggable,
+  blobSensitivity,
+  setBlobSensitivity,
+  terminalSettings,
+  setTerminalSettings
+}) {
+  const { assistantName, updateAssistantName, wakeWordRequired, setWakeWordRequired } = useAssistantConfig();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [isBlobSectionOpen, setIsBlobSectionOpen] = useState(true);
+  const [isJarvisSectionOpen, setIsJarvisSectionOpen] = useState(true);
+  const [isInterfaceSectionOpen, setIsInterfaceSectionOpen] = useState(true);
+  const [isTerminalSectionOpen, setIsTerminalSectionOpen] = useState(false);
+  const [settingsTheme, setSettingsTheme] = useState(() => {
+    return localStorage.getItem('jarvis-settings-theme') || 'dark';
+  });
+  const navbarRef = useRef(null);
+  const settingsPanelRef = useRef(null);
+
+  const handleSettingsMouseMove = (e) => {
+    if (settingsPanelRef.current) {
+      const panel = settingsPanelRef.current;
+      const rect = panel.getBoundingClientRect();
+      
+      // Calculate cursor position relative to panel center
+      const x = e.clientX - rect.left - rect.width / 2;
+      const y = e.clientY - rect.top - rect.height / 2;
+      
+      // Convert to rotation angles (max 6 degrees tilt for realistic weight)
+      const rx = -(y / (rect.height / 2)) * 6;
+      const ry = (x / (rect.width / 2)) * 6;
+      
+      panel.style.setProperty('--rx', `${rx}deg`);
+      panel.style.setProperty('--ry', `${ry}deg`);
+      
+      // Calculate specular shine light position
+      const mx = ((e.clientX - rect.left) / rect.width) * 100;
+      const my = ((e.clientY - rect.top) / rect.height) * 100;
+      panel.style.setProperty('--mx', `${mx}%`);
+      panel.style.setProperty('--my', `${my}%`);
+    }
+  };
+
+  const handleSettingsMouseLeave = () => {
+    if (settingsPanelRef.current) {
+      const panel = settingsPanelRef.current;
+      panel.style.setProperty('--rx', '0deg');
+      panel.style.setProperty('--ry', '0deg');
+      panel.style.setProperty('--mx', '50%');
+      panel.style.setProperty('--my', '50%');
+    }
+  };
+
+  const menuItems = [
+    { label: 'Home', path: '#' },
+    { label: 'Features', path: '#features' },
+    { label: 'Core', path: '#core' },
+    { label: 'Sandbox', path: '#sandbox' },
+    { label: 'Docs', path: '#docs' }
+  ];
+
+  // Helper colors utilities
+  const hexToRgb = (hex) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : null;
+  };
+
+  const rgbToHex = (r, g, b) => {
+    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+  };
+
+  const generateColorsFromPrimary = (hexColor) => {
+    const rgb = hexToRgb(hexColor);
+    if (!rgb) return;
+    const deep = rgbToHex(Math.floor(rgb.r * 0.08), Math.floor(rgb.g * 0.08), Math.floor(rgb.b * 0.2));
+    const mid = rgbToHex(Math.floor(rgb.r * 0.5), Math.floor(rgb.g * 0.6), Math.floor(rgb.b * 0.9));
+    const shell = rgbToHex(Math.floor(rgb.r * 0.3), Math.floor(rgb.g * 0.4), Math.floor(rgb.b * 0.9));
+    const newColor = { name: 'Custom', deep, mid, bright: hexColor, shell };
+    setBlobColor(newColor);
+    localStorage.setItem('jarvis-blob-color', JSON.stringify(newColor));
+  };
+
+  const handleSavePosition = () => {
+    if (blobPosition) {
+      localStorage.setItem('jarvis-blob-position', JSON.stringify(blobPosition));
+      setIsDraggable(false);
+      showToast("Position saved!");
+    }
+  };
+
+  const handleResetPosition = () => {
+    localStorage.removeItem('jarvis-blob-position');
+    const defaultPos = {
+      x: window.innerWidth - blobSize - 20,
+      y: window.innerHeight - blobSize - 20
+    };
+    setBlobPosition(defaultPos);
+    setIsDraggable(false);
+    showToast("Position reset!");
+  };
+
+  const applyPresetPosition = (preset) => {
+    let x = 20;
+    let y = 20;
+    const margin = 20;
+
+    switch (preset) {
+      case 'top-left':
+        x = margin;
+        y = margin;
+        break;
+      case 'top-center':
+        x = (window.innerWidth - blobSize) / 2;
+        y = margin;
+        break;
+      case 'top-right':
+        x = window.innerWidth - blobSize - margin;
+        y = margin;
+        break;
+      case 'mid-left':
+        x = margin;
+        y = (window.innerHeight - blobSize) / 2;
+        break;
+      case 'center':
+        x = (window.innerWidth - blobSize) / 2;
+        y = (window.innerHeight - blobSize) / 2;
+        break;
+      case 'mid-right':
+        x = window.innerWidth - blobSize - margin;
+        y = (window.innerHeight - blobSize) / 2;
+        break;
+      case 'bottom-left':
+        x = margin;
+        y = window.innerHeight - blobSize - margin;
+        break;
+      case 'bottom-center':
+        x = (window.innerWidth - blobSize) / 2;
+        y = window.innerHeight - blobSize - margin;
+        break;
+      case 'bottom-right':
+        x = window.innerWidth - blobSize - margin;
+        y = window.innerHeight - blobSize - margin;
+        break;
+      default:
+        return;
+    }
+
+    // Ensure within viewport boundaries
+    x = Math.max(margin, Math.min(window.innerWidth - blobSize - margin, x));
+    y = Math.max(margin, Math.min(window.innerHeight - blobSize - margin, y));
+
+    const newPos = { x, y };
+    setBlobPosition(newPos);
+    localStorage.setItem('jarvis-blob-position', JSON.stringify(newPos));
+    showToast(`Position set to ${preset.replace('-', ' ')}`);
+  };
+
+  const updateTerminalSetting = (key, value) => {
+    setTerminalSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSaveTextPosition = () => {
+    if (jarvisTextPosition) {
+      localStorage.setItem('jarvis-text-position', JSON.stringify(jarvisTextPosition));
+      setIsTextDraggable(false);
+      showToast("Text Position saved!");
+    }
+  };
+
+  const handleResetTextPosition = () => {
+    localStorage.removeItem('jarvis-text-position');
+    setJarvisTextPosition(null);
+    setIsTextDraggable(false);
+    showToast("Text Position reset!");
+  };
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 2000);
+  };
+
+  // Track mouse coordinates for liquid aura flow effect
+  const handleMouseMove = (e) => {
+    if (navbarRef.current) {
+      const rect = navbarRef.current.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      navbarRef.current.style.setProperty('--mouse-x', `${x}%`);
+      navbarRef.current.style.setProperty('--mouse-y', `${y}%`);
+    }
+  };
+
+  const handleLinkClick = (e, index) => {
+    setActiveIndex(index);
+    setMobileOpen(false);
+    // Smooth scroll for hash links
+    const targetId = menuItems[index].path;
+    if (targetId.startsWith('#') && targetId.length > 1) {
+      e.preventDefault();
+      const element = document.getElementById(targetId.substring(1));
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  };
+
+  return (
+    <div className="navbar-container">
+      <nav 
+        ref={navbarRef}
+        className="navbar" 
+        onMouseMove={handleMouseMove}
+      >
+        {/* Brand / Logo */}
+        <a href="#" className="nav-logo" onClick={(e) => handleLinkClick(e, 0)}>
+          <div className="logo-glow-dot"></div>
+          <span className="logo-text">{assistantName}</span>
+        </a>
+
+        {/* Nav Links */}
+        <ul className={`nav-links ${mobileOpen ? 'mobile-open' : ''}`}>
+          {menuItems.map((item, idx) => (
+            <li 
+              key={item.label}
+              className="nav-item"
+            >
+              <a
+                href={item.path}
+                className={`nav-link ${activeIndex === idx ? 'active' : ''}`}
+                onClick={(e) => handleLinkClick(e, idx)}
+              >
+                {item.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+
+        {/* Actions (Launch App & Settings) */}
+        <div className="nav-actions">
+          <button 
+            className={`btn-settings ${showSettings ? 'active' : ''}`}
+            onClick={() => setShowSettings(!showSettings)}
+            aria-label="Toggle blob settings"
+            title="Customize Blob settings"
+          >
+            <div className="settings-btn-glow"></div>
+            <svg 
+              className="reactor-svg"
+              width="20" 
+              height="20" 
+              viewBox="0 0 100 100" 
+              fill="none" 
+            >
+              {/* Outer dashed ring */}
+              <circle className="ring-outer" cx="50" cy="50" r="42" stroke="currentColor" strokeWidth="3" strokeDasharray="10 8" />
+              {/* Mid solid ring with gap */}
+              <circle className="ring-mid" cx="50" cy="50" r="30" stroke="currentColor" strokeWidth="4.5" strokeDasharray="120 40" />
+              {/* Inner details */}
+              <circle className="ring-inner" cx="50" cy="50" r="18" stroke="currentColor" strokeWidth="3" strokeDasharray="14 7" />
+              {/* Center core */}
+              <circle className="core-dot" cx="50" cy="50" r="8" fill="currentColor" />
+              {/* Core radiating lines */}
+              <line x1="50" y1="6" x2="50" y2="18" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <line x1="50" y1="82" x2="50" y2="94" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <line x1="6" y1="50" x2="18" y2="50" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <line x1="82" y1="50" x2="94" y2="50" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          </button>
+          
+          <button className="btn-launch">
+            <span>Launch Console</span>
+            <svg 
+              width="14" 
+              height="14" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2.5" 
+              strokeLinecap="round" 
+              strokeLinejoin="round"
+            >
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </button>
+          
+          {/* Mobile hamburger menu toggle */}
+          <button 
+            className={`mobile-toggle ${mobileOpen ? 'open' : ''}`} 
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label="Toggle navigation menu"
+          >
+            <span className="hamburger-line"></span>
+            <span className="hamburger-line"></span>
+            <span className="hamburger-line"></span>
+          </button>
+        </div>
+      </nav>
+
+      {/* Dropdown Settings Panel */}
+      {showSettings && (
+        <div 
+          ref={settingsPanelRef}
+          className={`settings-dropdown theme-${settingsTheme}`}
+          onMouseMove={handleSettingsMouseMove}
+          onMouseLeave={handleSettingsMouseLeave}
+        >
+          {/* HUD futuristic elements */}
+          <div className="hud-corner-bracket top-left"></div>
+          <div className="hud-corner-bracket top-right"></div>
+          <div className="hud-corner-bracket bottom-left"></div>
+          <div className="hud-corner-bracket bottom-right"></div>
+          <div className="hud-scan-line"></div>
+
+          <div className="settings-header">
+            <div className="settings-header-title">
+              <span className="glow-dot"></span>
+              <h3>Neural Core settings</h3>
+            </div>
+            <button className="btn-close-settings" onClick={() => setShowSettings(false)}>×</button>
+          </div>
+
+          <div className="settings-columns-container">
+            {/* COLUMN 1: BLOB SETTINGS */}
+            <div className={`settings-column ${isBlobSectionOpen ? 'open' : 'collapsed'}`}>
+              <button 
+                className="column-accordion-header"
+                onClick={() => setIsBlobSectionOpen(!isBlobSectionOpen)}
+              >
+                <div className="header-text-group">
+                  <span className="module-tag">SYS-01</span>
+                  <h4>Blob Settings</h4>
+                </div>
+                <div className="header-status-indicator">
+                  <span className="status-label">{isBlobSectionOpen ? 'ONLINE' : 'STANDBY'}</span>
+                  <span className={`status-dot ${isBlobSectionOpen ? 'online' : 'standby'}`}></span>
+                  <span className="chevron-icon">{isBlobSectionOpen ? '▼' : '▲'}</span>
+                </div>
+              </button>
+              
+              <div className="column-accordion-content">
+                <div className="settings-section">
+                  <label className="section-label">1. Blob Theme Color</label>
+                  <div className="custom-color-picker-container" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
+                    <span className="picker-label" style={{ fontSize: '13px', color: 'var(--text)' }}>Choose Color:</span>
+                    <input
+                      type="color"
+                      value={blobColor.bright}
+                      onChange={(e) => generateColorsFromPrimary(e.target.value)}
+                      className="custom-color-input"
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'transparent',
+                        width: '40px',
+                        height: '40px',
+                        cursor: 'pointer',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        padding: '0'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', fontFamily: 'var(--mono)', color: 'var(--accent)', fontWeight: 'bold' }}>
+                      {blobColor.bright.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="settings-section">
+                  <div className="section-label-row">
+                    <label className="section-label">2. Blob Size</label>
+                    <span className="size-value-display">{blobSize}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="500"
+                    step="10"
+                    value={blobSize}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      setBlobSize(val);
+                      localStorage.setItem('jarvis-blob-size', val);
+                    }}
+                    className="size-slider-input"
+                  />
+                </div>
+
+                <div className="settings-section">
+                  <div className="section-label-row">
+                    <label className="section-label">3. Reaction Sensitivity</label>
+                    <span className="size-value-display">{blobSensitivity}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="10.0"
+                    step="0.1"
+                    value={blobSensitivity}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setBlobSensitivity(val);
+                      localStorage.setItem('jarvis-blob-sensitivity', val);
+                    }}
+                    className="size-slider-input"
+                  />
+                </div>
+
+                <div className="settings-section">
+                  <label className="section-label">4. Blob Position</label>
+                  <div className="drag-action-row">
+                    <button
+                      className={`btn-drag-toggle ${!isDraggable ? 'active' : ''}`}
+                      onClick={() => setIsDraggable(!isDraggable)}
+                    >
+                      {isDraggable ? '🔓 Drag Enabled — Click to Lock' : '🔒 Drag Locked — Click to Unlock'}
+                    </button>
+                    {isDraggable && (
+                      <button className="btn-save-pos" onClick={handleSavePosition}>
+                        Save Position
+                      </button>
+                    )}
+                  </div>
+                  <div className="drag-reset-row" style={{ marginTop: '10px' }}>
+                    <button className="btn-reset-pos" onClick={handleResetPosition}>
+                      Reset to Default
+                    </button>
+                  </div>
+                  
+                  {/* Preset Position Select Dropdown */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                    <label className="section-label">Position Presets</label>
+                    <select
+                      defaultValue=""
+                      onChange={(e) => {
+                        const preset = e.target.value;
+                        if (preset) {
+                          applyPresetPosition(preset);
+                          e.target.value = ""; // reset selection
+                        }
+                      }}
+                      style={{
+                        background: settingsTheme === 'light' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(10, 12, 16, 0.95)',
+                        border: settingsTheme === 'light' ? '1px solid rgba(0, 0, 0, 0.15)' : '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '10px',
+                        color: settingsTheme === 'light' ? '#000' : '#fff',
+                        padding: '8px 12px',
+                        fontSize: '13px',
+                        outline: 'none',
+                        cursor: 'pointer',
+                        width: '100%',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <option value="" disabled>Select screen preset...</option>
+                      <option value="top-left">Top Left</option>
+                      <option value="top-center">Top Center</option>
+                      <option value="top-right">Top Right</option>
+                      <option value="mid-left">Middle Left</option>
+                      <option value="center">Middle / Center</option>
+                      <option value="mid-right">Middle Right</option>
+                      <option value="bottom-left">Bottom Left</option>
+                      <option value="bottom-center">Bottom Center</option>
+                      <option value="bottom-right">Bottom Right</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* COLUMN 2: JARVIS CUSTOMIZATION */}
+            <div className={`settings-column ${isJarvisSectionOpen ? 'open' : 'collapsed'}`}>
+              <button 
+                className="column-accordion-header"
+                onClick={() => setIsJarvisSectionOpen(!isJarvisSectionOpen)}
+              >
+                <div className="header-text-group">
+                  <span className="module-tag">SYS-02</span>
+                  <h4>{assistantName} Customization</h4>
+                </div>
+                <div className="header-status-indicator">
+                  <span className="status-label">{isJarvisSectionOpen ? 'ONLINE' : 'STANDBY'}</span>
+                  <span className={`status-dot ${isJarvisSectionOpen ? 'online' : 'standby'}`}></span>
+                  <span className="chevron-icon">{isJarvisSectionOpen ? '▼' : '▲'}</span>
+                </div>
+              </button>
+              
+              <div className="column-accordion-content">
+                <div className="settings-section">
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>1. Edit Text Content</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+                    <input
+                      type="text"
+                      value={assistantName}
+                      onChange={(e) => updateAssistantName(e.target.value)}
+                      placeholder="Enter text..."
+                      style={{
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        borderRadius: '10px',
+                        color: '#fff',
+                        padding: '8px 12px',
+                        fontSize: '13px',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>2. Wake Word Settings</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#fff', fontSize: '13px' }}>
+                      <input
+                        type="checkbox"
+                        checked={wakeWordRequired}
+                        onChange={(e) => setWakeWordRequired(e.target.checked)}
+                        style={{ cursor: 'pointer', width: '15px', height: '15px' }}
+                      />
+                      <span>Wake Word Required</span>
+                    </label>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', fontFamily: 'var(--mono)', lineHeight: '1.4' }}>
+                      If ON, commands only execute when prefixed with a wake word (e.g. "{assistantName.toLowerCase()}").
+                    </div>
+                  </div>
+
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>3. Font Styling</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+                    <select
+                      value={jarvisFont}
+                      onChange={(e) => {
+                        setJarvisFont(e.target.value);
+                        localStorage.setItem('jarvis-text-font', e.target.value);
+                      }}
+                      style={{
+                        background: settingsTheme === 'light' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(10, 12, 16, 0.95)',
+                        border: settingsTheme === 'light' ? '1px solid rgba(0, 0, 0, 0.15)' : '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '10px',
+                        color: settingsTheme === 'light' ? '#000' : '#fff',
+                        padding: '8px 12px',
+                        fontSize: '13px',
+                        outline: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="'Orbitron', sans-serif">Orbitron (Futuristic)</option>
+                      <option value="'Space Grotesk', sans-serif">Space Grotesk (Tech)</option>
+                      <option value="'Syne', sans-serif">Syne (Modern Bold)</option>
+                      <option value="'Share Tech Mono', monospace">Share Tech Mono (HUD)</option>
+                      <option value="'Bruno Ace SC', sans-serif">Bruno Ace SC (Cyberpunk)</option>
+                      <option value="'Major Mono Display', monospace">Major Mono (Abstract)</option>
+                      <option value="'Codystar', sans-serif">Codystar (Neon Dotted)</option>
+                      <option value="'Bungee', sans-serif">Bungee (Retro Solid)</option>
+                    </select>
+                  </div>
+
+                  {/* ── Text Color Section ── */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
+                    {/* Status badge */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="picker-label" style={{ fontSize: '13px', color: 'var(--text)', fontWeight: '600' }}>Text Color:</span>
+                      <span style={{
+                        fontSize: '10px',
+                        fontFamily: "'Share Tech Mono', monospace",
+                        fontWeight: 'bold',
+                        letterSpacing: '1px',
+                        padding: '2px 8px',
+                        borderRadius: '20px',
+                        background: jarvisColor ? 'rgba(255,51,102,0.12)' : 'rgba(0,229,255,0.12)',
+                        border: jarvisColor ? '1px solid rgba(255,51,102,0.4)' : '1px solid rgba(0,229,255,0.4)',
+                        color: jarvisColor ? '#ff3366' : '#00e5ff',
+                      }}>
+                        {jarvisColor ? '● CUSTOM' : '⟳ AUTO-SYNCED TO BLOB'}
+                      </span>
+                    </div>
+
+                    {/* Color row: swatch preview + picker + hex value */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {/* Live preview swatch */}
+                      <div style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        background: jarvisColor || blobColor.bright,
+                        boxShadow: `0 0 10px ${jarvisColor || blobColor.bright}88`,
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        flexShrink: 0
+                      }} />
+                      {/* Color input picker */}
+                      <input
+                        type="color"
+                        value={jarvisColor || blobColor.bright}
+                        onChange={(e) => {
+                          setJarvisColor(e.target.value);
+                          localStorage.setItem('jarvis-text-color', e.target.value);
+                        }}
+                        className="custom-color-input"
+                        title="Pick custom color"
+                        style={{
+                          border: '2px solid rgba(0,229,255,0.35)',
+                          background: 'transparent',
+                          width: '36px',
+                          height: '36px',
+                          cursor: 'pointer',
+                          borderRadius: '50%',
+                          overflow: 'hidden',
+                          padding: '0',
+                          flexShrink: 0
+                        }}
+                      />
+                      <span style={{ fontSize: '13px', fontFamily: 'var(--mono)', color: 'var(--accent)', fontWeight: 'bold', letterSpacing: '1px' }}>
+                        {(jarvisColor || blobColor.bright).toUpperCase()}
+                      </span>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+
+                      {/* Sync with Blob toggle */}
+                      <button
+                        onClick={() => {
+                          if (jarvisColor) {
+                            // Currently custom → switch to auto-sync (clear custom color)
+                            setJarvisColor('');
+                            localStorage.removeItem('jarvis-text-color');
+                            showToast('Text color synced to blob!');
+                          } else {
+                            // Currently auto-synced → pin the current blob color as custom
+                            const pinned = blobColor.bright;
+                            setJarvisColor(pinned);
+                            localStorage.setItem('jarvis-text-color', pinned);
+                            showToast('Blob color pinned to text!');
+                          }
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: jarvisColor
+                            ? 'rgba(255,255,255,0.06)'
+                            : `linear-gradient(135deg, ${blobColor.bright}28, ${blobColor.mid}38)`,
+                          border: jarvisColor
+                            ? '1px solid rgba(255,255,255,0.18)'
+                            : `1.5px solid ${blobColor.bright}66`,
+                          borderRadius: '20px',
+                          color: jarvisColor ? 'rgba(255,255,255,0.7)' : blobColor.bright,
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          fontFamily: "'Space Grotesk', sans-serif",
+                          cursor: 'pointer',
+                          padding: '7px 14px',
+                          transition: 'all 0.25s ease',
+                          letterSpacing: '0.5px',
+                          boxShadow: jarvisColor ? 'none' : `0 0 10px ${blobColor.bright}33`
+                        }}
+                      >
+                        <span style={{
+                          display: 'inline-block',
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: jarvisColor ? 'rgba(255,255,255,0.4)' : blobColor.bright,
+                          boxShadow: jarvisColor ? 'none' : `0 0 6px ${blobColor.bright}`,
+                          flexShrink: 0
+                        }} />
+                        {jarvisColor ? 'Sync with Blob' : '✓ Synced with Blob'}
+                      </button>
+
+                      {/* Reset / unpin — only if custom color active */}
+                      {jarvisColor && (
+                        <button
+                          onClick={() => {
+                            setJarvisColor('');
+                            localStorage.removeItem('jarvis-text-color');
+                            showToast('Text color reset!');
+                          }}
+                          style={{
+                            background: 'rgba(255,51,102,0.08)',
+                            border: '1px solid rgba(255,51,102,0.3)',
+                            borderRadius: '20px',
+                            color: '#ff5577',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            fontFamily: "'Space Grotesk', sans-serif",
+                            cursor: 'pointer',
+                            padding: '7px 14px',
+                            transition: 'all 0.25s ease',
+                          }}
+                        >
+                          Reset Color
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="settings-section">
+                  <div className="section-label-row">
+                    <label className="section-label">4. Text Size</label>
+                    <span className="size-value-display">{jarvisFontSize}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="24"
+                    max="300"
+                    step="1"
+                    value={jarvisFontSize}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      setJarvisFontSize(val);
+                      localStorage.setItem('jarvis-text-size', val);
+                    }}
+                    className="size-slider-input"
+                  />
+                </div>
+
+                <div className="settings-section">
+                  <label className="section-label">5. Position Settings</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div className="drag-action-row">
+                      <button
+                        className={`btn-drag-toggle ${isTextDraggable ? 'active' : ''}`}
+                        onClick={() => setIsTextDraggable(!isTextDraggable)}
+                        style={{ flex: 1 }}
+                      >
+                        {isTextDraggable ? 'Dragging Text Active' : `Drag ${assistantName} Text`}
+                      </button>
+                      {isTextDraggable && (
+                        <button className="btn-save-pos" onClick={handleSaveTextPosition}>
+                          Save Position
+                        </button>
+                      )}
+                    </div>
+                    <button className="btn-reset-pos" onClick={handleResetTextPosition}>
+                      Attach to Orb (Default)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* COLUMN 3: INTERFACE MODE (SYS-03) */}
+            <div className={`settings-column ${isInterfaceSectionOpen ? 'open' : 'collapsed'}`}>
+              <button 
+                className="column-accordion-header"
+                onClick={() => setIsInterfaceSectionOpen(!isInterfaceSectionOpen)}
+              >
+                <div className="header-text-group">
+                  <span className="module-tag">SYS-03</span>
+                  <h4>Interface Settings</h4>
+                </div>
+                <div className="header-status-indicator">
+                  <span className="status-label">{isInterfaceSectionOpen ? 'ONLINE' : 'STANDBY'}</span>
+                  <span className={`status-dot ${isInterfaceSectionOpen ? 'online' : 'standby'}`}></span>
+                  <span className="chevron-icon">{isInterfaceSectionOpen ? '▼' : '▲'}</span>
+                </div>
+              </button>
+              
+              <div className="column-accordion-content">
+                <div className="settings-section" style={{ borderBottom: 'none', paddingBottom: '0' }}>
+                  <label className="section-label">1. Transparent Glass Theme</label>
+                  <div className="theme-toggle-container">
+                    <button 
+                      className={`btn-theme-toggle ${settingsTheme === 'dark' ? 'active' : ''}`}
+                      onClick={() => {
+                        setSettingsTheme('dark');
+                        localStorage.setItem('jarvis-settings-theme', 'dark');
+                      }}
+                    >
+                      Dark Glass
+                    </button>
+                    <button 
+                      className={`btn-theme-toggle ${settingsTheme === 'light' ? 'active' : ''}`}
+                      onClick={() => {
+                        setSettingsTheme('light');
+                        localStorage.setItem('jarvis-settings-theme', 'light');
+                      }}
+                    >
+                      Light Glass
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* COLUMN 4: TERMINAL CONFIGURATION (SYS-04) */}
+            <div className={`settings-column ${isTerminalSectionOpen ? 'open' : 'collapsed'}`}>
+              <button 
+                className="column-accordion-header"
+                onClick={() => setIsTerminalSectionOpen(!isTerminalSectionOpen)}
+              >
+                <div className="header-text-group">
+                  <span className="module-tag">SYS-04</span>
+                  <h4>Terminal Config</h4>
+                </div>
+                <div className="header-status-indicator">
+                  <span className="status-label">{isTerminalSectionOpen ? 'ONLINE' : 'STANDBY'}</span>
+                  <span className={`status-dot ${isTerminalSectionOpen ? 'online' : 'standby'}`}></span>
+                  <span className="chevron-icon">{isTerminalSectionOpen ? '▼' : '▲'}</span>
+                </div>
+              </button>
+              
+              <div className="column-accordion-content">
+                <div className="settings-section">
+                  <label className="section-label">1. Terminal Theme Color</label>
+                  <div className="custom-color-picker-container" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
+                    <span className="picker-label" style={{ fontSize: '13px', color: 'var(--text)' }}>Choose Color:</span>
+                    <input
+                      type="color"
+                      value={terminalSettings.colorTheme}
+                      onChange={(e) => {
+                        updateTerminalSetting('colorTheme', e.target.value);
+                      }}
+                      className="custom-color-input"
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'transparent',
+                        width: '40px',
+                        height: '40px',
+                        cursor: 'pointer',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        padding: '0'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', fontFamily: 'var(--mono)', color: 'var(--accent)', fontWeight: 'bold' }}>
+                      {terminalSettings.colorTheme.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="settings-section">
+                  <div className="section-label-row">
+                    <label className="section-label">2. Panel Dimensions</label>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>Width:</span>
+                      <span className="size-value-display">{terminalSettings.width}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="320"
+                      max="1200"
+                      step="10"
+                      value={terminalSettings.width}
+                      onChange={(e) => updateTerminalSetting('width', parseInt(e.target.value))}
+                      className="size-slider-input"
+                    />
+                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>Height:</span>
+                      <span className="size-value-display">{terminalSettings.height}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="50"
+                      max="400"
+                      step="5"
+                      value={terminalSettings.height}
+                      onChange={(e) => updateTerminalSetting('height', parseInt(e.target.value))}
+                      className="size-slider-input"
+                    />
+                  </div>
+                </div>
+
+                <div className="settings-section">
+                  <div className="section-label-row">
+                    <label className="section-label">3. Shape & Aesthetics</label>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>Corner Radius:</span>
+                      <span className="size-value-display">{terminalSettings.borderRadius}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="30"
+                      value={terminalSettings.borderRadius}
+                      onChange={(e) => updateTerminalSetting('borderRadius', parseInt(e.target.value))}
+                      className="size-slider-input"
+                    />
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>Opacity:</span>
+                      <span className="size-value-display">{Math.round(terminalSettings.bgOpacity * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.20"
+                      max="1.00"
+                      step="0.05"
+                      value={terminalSettings.bgOpacity}
+                      onChange={(e) => updateTerminalSetting('bgOpacity', parseFloat(e.target.value))}
+                      className="size-slider-input"
+                    />
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>Glow Intensity:</span>
+                      <span className="size-value-display">{Math.round(terminalSettings.borderGlow * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.05"
+                      max="1.00"
+                      step="0.05"
+                      value={terminalSettings.borderGlow}
+                      onChange={(e) => updateTerminalSetting('borderGlow', parseFloat(e.target.value))}
+                      className="size-slider-input"
+                      style={{ marginBottom: '8px' }}
+                    />
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>Font Family:</span>
+                    </div>
+                    <select
+                      value={terminalSettings.fontFamily || "'Share Tech Mono', monospace"}
+                      onChange={(e) => updateTerminalSetting('fontFamily', e.target.value)}
+                      className="settings-select"
+                      style={{ width: '100%', marginTop: '4px', boxSizing: 'border-box' }}
+                    >
+                      <option value="'Share Tech Mono', monospace">Share Tech Mono (HUD)</option>
+                      <option value="'Orbitron', sans-serif">Orbitron (Futuristic)</option>
+                      <option value="'Space Grotesk', sans-serif">Space Grotesk (Tech)</option>
+                      <option value="'Syne', sans-serif">Syne (Modern Bold)</option>
+                      <option value="'Bruno Ace SC', sans-serif">Bruno Ace SC (Cyberpunk)</option>
+                      <option value="'Major Mono Display', monospace">Major Mono (Abstract)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {toastMessage && (
+            <div className="settings-toast">
+              {toastMessage}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
