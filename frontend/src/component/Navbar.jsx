@@ -26,7 +26,7 @@ export default function Navbar({
   terminalSettings,
   setTerminalSettings
 }) {
-  const { assistantName, updateAssistantName, wakeWordRequired, setWakeWordRequired } = useAssistantConfig();
+  const { assistantName, updateAssistantName, wakeWordRequired, setWakeWordRequired, statusSettings, updateStatusSetting, visualizerMode, setVisualizerMode } = useAssistantConfig();
   const [activeIndex, setActiveIndex] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -35,16 +35,26 @@ export default function Navbar({
   const [isJarvisSectionOpen, setIsJarvisSectionOpen] = useState(true);
   const [isInterfaceSectionOpen, setIsInterfaceSectionOpen] = useState(true);
   const [isTerminalSectionOpen, setIsTerminalSectionOpen] = useState(false);
+  const [isStatusSectionOpen, setIsStatusSectionOpen] = useState(false);
   const [settingsTheme, setSettingsTheme] = useState(() => {
     return localStorage.getItem('jarvis-settings-theme') || 'dark';
   });
   const navbarRef = useRef(null);
   const settingsPanelRef = useRef(null);
+  const settingsRectRef = useRef(null);
+
+  const handleSettingsMouseEnter = () => {
+    if (settingsPanelRef.current) {
+      settingsRectRef.current = settingsPanelRef.current.getBoundingClientRect();
+    }
+  };
 
   const handleSettingsMouseMove = (e) => {
     if (settingsPanelRef.current) {
-      const panel = settingsPanelRef.current;
-      const rect = panel.getBoundingClientRect();
+      if (!settingsRectRef.current) {
+        settingsRectRef.current = settingsPanelRef.current.getBoundingClientRect();
+      }
+      const rect = settingsRectRef.current;
       
       // Calculate cursor position relative to panel center
       const x = e.clientX - rect.left - rect.width / 2;
@@ -54,14 +64,14 @@ export default function Navbar({
       const rx = -(y / (rect.height / 2)) * 6;
       const ry = (x / (rect.width / 2)) * 6;
       
-      panel.style.setProperty('--rx', `${rx}deg`);
-      panel.style.setProperty('--ry', `${ry}deg`);
+      settingsPanelRef.current.style.setProperty('--rx', `${rx}deg`);
+      settingsPanelRef.current.style.setProperty('--ry', `${ry}deg`);
       
       // Calculate specular shine light position
       const mx = ((e.clientX - rect.left) / rect.width) * 100;
       const my = ((e.clientY - rect.top) / rect.height) * 100;
-      panel.style.setProperty('--mx', `${mx}%`);
-      panel.style.setProperty('--my', `${my}%`);
+      settingsPanelRef.current.style.setProperty('--mx', `${mx}%`);
+      settingsPanelRef.current.style.setProperty('--my', `${my}%`);
     }
   };
 
@@ -73,6 +83,7 @@ export default function Navbar({
       panel.style.setProperty('--mx', '50%');
       panel.style.setProperty('--my', '50%');
     }
+    settingsRectRef.current = null;
   };
 
   const menuItems = [
@@ -184,7 +195,11 @@ export default function Navbar({
   };
 
   const updateTerminalSetting = (key, value) => {
-    setTerminalSettings(prev => ({ ...prev, [key]: value }));
+    setTerminalSettings(prev => {
+      const updated = { ...prev, [key]: value };
+      localStorage.setItem('jarvis-terminal-settings', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const handleSaveTextPosition = () => {
@@ -202,20 +217,43 @@ export default function Navbar({
     showToast("Text Position reset!");
   };
 
+  const toastTimerRef = useRef(null);
+
   const showToast = (msg) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 2000);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(''), 2000);
   };
 
-  // Track mouse coordinates for liquid aura flow effect
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
+  const navbarRectRef = useRef(null);
+
+  const handleNavbarMouseEnter = () => {
+    if (navbarRef.current) {
+      navbarRectRef.current = navbarRef.current.getBoundingClientRect();
+    }
+  };
+
   const handleMouseMove = (e) => {
     if (navbarRef.current) {
-      const rect = navbarRef.current.getBoundingClientRect();
+      if (!navbarRectRef.current) {
+        navbarRectRef.current = navbarRef.current.getBoundingClientRect();
+      }
+      const rect = navbarRectRef.current;
       const x = ((e.clientX - rect.left) / rect.width) * 100;
       const y = ((e.clientY - rect.top) / rect.height) * 100;
       navbarRef.current.style.setProperty('--mouse-x', `${x}%`);
       navbarRef.current.style.setProperty('--mouse-y', `${y}%`);
     }
+  };
+
+  const handleNavbarMouseLeave = () => {
+    navbarRectRef.current = null;
   };
 
   const handleLinkClick = (e, index) => {
@@ -237,7 +275,9 @@ export default function Navbar({
       <nav 
         ref={navbarRef}
         className="navbar" 
+        onMouseEnter={handleNavbarMouseEnter}
         onMouseMove={handleMouseMove}
+        onMouseLeave={handleNavbarMouseLeave}
       >
         {/* Brand / Logo */}
         <a href="#" className="nav-logo" onClick={(e) => handleLinkClick(e, 0)}>
@@ -330,6 +370,7 @@ export default function Navbar({
         <div 
           ref={settingsPanelRef}
           className={`settings-dropdown theme-${settingsTheme}`}
+          onMouseEnter={handleSettingsMouseEnter}
           onMouseMove={handleSettingsMouseMove}
           onMouseLeave={handleSettingsMouseLeave}
         >
@@ -490,6 +531,37 @@ export default function Navbar({
                       <option value="bottom-center">Bottom Center</option>
                       <option value="bottom-right">Bottom Right</option>
                     </select>
+                  </div>
+                </div>
+
+                <div className="settings-section" style={{ borderBottom: 'none', paddingBottom: '0' }}>
+                  <label className="section-label">5. Visualizer Input Mode</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                    <select
+                      value={visualizerMode}
+                      onChange={(e) => {
+                        setVisualizerMode(e.target.value);
+                        showToast(`Visualizer: ${e.target.value.toUpperCase()}`);
+                      }}
+                      style={{
+                        background: settingsTheme === 'light' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(10, 12, 16, 0.95)',
+                        border: settingsTheme === 'light' ? '1px solid rgba(0, 0, 0, 0.15)' : '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '10px',
+                        color: settingsTheme === 'light' ? '#000' : '#fff',
+                        padding: '8px 12px',
+                        fontSize: '13px',
+                        outline: 'none',
+                        cursor: 'pointer',
+                        width: '100%',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <option value="real">🎙️ Real Microphone Input</option>
+                      <option value="simulated">💻 Simulated Input (OBS / YouTube Mode)</option>
+                    </select>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', fontFamily: 'var(--mono)', lineHeight: '1.4' }}>
+                      Select <b>Simulated</b> if recording for YouTube/OBS to avoid microphone sharing conflicts.
+                    </div>
                   </div>
                 </div>
               </div>
@@ -953,6 +1025,187 @@ export default function Navbar({
                       <option value="'Bruno Ace SC', sans-serif">Bruno Ace SC (Cyberpunk)</option>
                       <option value="'Major Mono Display', monospace">Major Mono (Abstract)</option>
                     </select>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>4. Positioning Settings</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                      <button
+                        className={`btn-drag-toggle ${terminalSettings.draggable ? 'active' : ''}`}
+                        onClick={() => updateTerminalSetting('draggable', !terminalSettings.draggable)}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '10px',
+                          background: terminalSettings.draggable ? 'var(--terminal-theme-color, #00ff66)' : 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          color: terminalSettings.draggable ? '#000' : '#fff',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          transition: 'all 0.25s ease'
+                        }}
+                      >
+                        {terminalSettings.draggable ? 'Dragging Panel Active' : 'Enable Draggable Panel'}
+                      </button>
+                      {terminalSettings.position && (
+                        <button
+                          onClick={() => {
+                            updateTerminalSetting('position', null);
+                            showToast('Terminal position reset!');
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            borderRadius: '8px',
+                            background: 'rgba(255, 51, 102, 0.1)',
+                            border: '1px solid rgba(255, 51, 102, 0.3)',
+                            color: '#ff5577',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                        >
+                          Reset Position to Default
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* COLUMN 5: STATUS MATRIX CONFIGURATION (SYS-05) */}
+            <div className={`settings-column ${isStatusSectionOpen ? 'open' : 'collapsed'}`}>
+              <button 
+                className="column-accordion-header"
+                onClick={() => setIsStatusSectionOpen(!isStatusSectionOpen)}
+              >
+                <div className="header-text-group">
+                  <span className="module-tag">SYS-05</span>
+                  <h4>Status Matrix Config</h4>
+                </div>
+                <div className="header-status-indicator">
+                  <span className="status-label">{isStatusSectionOpen ? 'ONLINE' : 'STANDBY'}</span>
+                  <span className={`status-dot ${isStatusSectionOpen ? 'online' : 'standby'}`}></span>
+                  <span className="chevron-icon">{isStatusSectionOpen ? '▼' : '▲'}</span>
+                </div>
+              </button>
+              
+              <div className="column-accordion-content">
+                {/* 1. Header Title Text */}
+                <div className="settings-section">
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>1. Custom Title Text</label>
+                  <input
+                    type="text"
+                    value={statusSettings.titleText}
+                    onChange={(e) => updateStatusSetting('titleText', e.target.value)}
+                    placeholder="SYSTEM STATUS MATRIX"
+                    style={{
+                      width: '100%',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      padding: '8px 12px',
+                      fontSize: '13px',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {/* 2. Status Capsule Theme Color */}
+                <div className="settings-section">
+                  <label className="section-label">2. Matrix Theme Color</label>
+                  <div className="custom-color-picker-container" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
+                    <input
+                      type="color"
+                      value={statusSettings.colorTheme}
+                      onChange={(e) => updateStatusSetting('colorTheme', e.target.value)}
+                      className="custom-color-input"
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'transparent',
+                        width: '40px',
+                        height: '40px',
+                        cursor: 'pointer',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        padding: '0'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', fontFamily: 'var(--mono)', color: 'var(--accent)', fontWeight: 'bold' }}>
+                      {statusSettings.colorTheme.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3. Status Text Color */}
+                <div className="settings-section">
+                  <label className="section-label">3. Text Color</label>
+                  <div className="custom-color-picker-container" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
+                    <input
+                      type="color"
+                      value={statusSettings.textColor}
+                      onChange={(e) => updateStatusSetting('textColor', e.target.value)}
+                      className="custom-color-input"
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'transparent',
+                        width: '40px',
+                        height: '40px',
+                        cursor: 'pointer',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        padding: '0'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', fontFamily: 'var(--mono)', color: 'var(--accent)', fontWeight: 'bold' }}>
+                      {statusSettings.textColor.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 4. Drag & Position Status capsule */}
+                <div className="settings-section" style={{ borderBottom: 'none', paddingBottom: '0' }}>
+                  <label className="section-label">4. Positioning Settings</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                    <button
+                      className={`btn-drag-toggle ${statusSettings.draggable ? 'active' : ''}`}
+                      onClick={() => updateStatusSetting('draggable', !statusSettings.draggable)}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '10px',
+                        background: statusSettings.draggable ? 'var(--terminal-theme-color, #00ff66)' : 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        color: statusSettings.draggable ? '#000' : '#fff',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        transition: 'all 0.25s ease'
+                      }}
+                    >
+                      {statusSettings.draggable ? 'Dragging Panel Active' : 'Enable Draggable Panel'}
+                    </button>
+                    {statusSettings.position && (
+                      <button
+                        onClick={() => {
+                          updateStatusSetting('position', null);
+                          showToast('Position reset to top-right!');
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px',
+                          borderRadius: '8px',
+                          background: 'rgba(255, 51, 102, 0.1)',
+                          border: '1px solid rgba(255, 51, 102, 0.3)',
+                          color: '#ff5577',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        Reset Position to Default
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

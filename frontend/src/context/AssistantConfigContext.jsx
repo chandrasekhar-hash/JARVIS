@@ -28,11 +28,55 @@ export function AssistantConfigProvider({ children }) {
       `hey ${nameLower}`,
       `ok ${nameLower}`,
       `hello ${nameLower}`,
+      `hi ${nameLower}`,
       `hey${nameLower}`,
-      `ok${nameLower}`
+      `ok${nameLower}`,
+      `hi${nameLower}`
     ];
     setWakeWords(derived);
   }, [assistantName]);
+
+  const [voiceStatus, setVoiceStatus] = useState('standby');
+
+  const [statusSettings, setStatusSettingsState] = useState(() => {
+    const saved = localStorage.getItem('jarvis-status-settings');
+    if (saved) {
+      try {
+        return {
+          draggable: false,
+          position: null,
+          colorTheme: '#00ff66',
+          titleText: 'SYSTEM STATUS MATRIX',
+          textColor: '#ffffff',
+          ...JSON.parse(saved)
+        };
+      } catch (e) {}
+    }
+    return {
+      draggable: false,
+      position: null,
+      colorTheme: '#00ff66',
+      titleText: 'SYSTEM STATUS MATRIX',
+      textColor: '#ffffff'
+    };
+  });
+
+  const updateStatusSetting = (key, value) => {
+    setStatusSettingsState(prev => {
+      const updated = { ...prev, [key]: value };
+      localStorage.setItem('jarvis-status-settings', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const [visualizerMode, setVisualizerModeState] = useState(() => {
+    return localStorage.getItem('jarvis-visualizer-mode') || 'real';
+  });
+
+  const setVisualizerMode = (mode) => {
+    setVisualizerModeState(mode);
+    localStorage.setItem('jarvis-visualizer-mode', mode);
+  };
 
   const updateAssistantName = (newName) => {
     setAssistantName(newName);
@@ -50,7 +94,13 @@ export function AssistantConfigProvider({ children }) {
       updateAssistantName,
       wakeWordRequired,
       setWakeWordRequired,
-      wakeWords
+      wakeWords,
+      voiceStatus,
+      setVoiceStatus,
+      statusSettings,
+      updateStatusSetting,
+      visualizerMode,
+      setVisualizerMode
     }}>
       {children}
     </AssistantConfigContext.Provider>

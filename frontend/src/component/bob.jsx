@@ -134,7 +134,7 @@ export default function Bob({
   setIsTextDraggable,
   blobSensitivity
 }) {
-  const { assistantName } = useAssistantConfig();
+  const { assistantName, voiceStatus, visualizerMode } = useAssistantConfig();
   const mountRef = useRef(null);
 
   // Audio refs (no React state — avoids re-renders during animation)
@@ -206,7 +206,9 @@ export default function Bob({
     color: blobColor,
     size: blobSize,
     isDraggable: isDraggable,
-    sensitivity: blobSensitivity
+    sensitivity: blobSensitivity,
+    voiceStatus,
+    visualizerMode
   });
 
   useEffect(() => {
@@ -214,9 +216,11 @@ export default function Bob({
       color: blobColor,
       size: blobSize,
       isDraggable: isDraggable,
-      sensitivity: blobSensitivity
+      sensitivity: blobSensitivity,
+      voiceStatus,
+      visualizerMode
     };
-  }, [blobColor, blobSize, isDraggable, blobSensitivity]);
+  }, [blobColor, blobSize, isDraggable, blobSensitivity, voiceStatus, visualizerMode]);
 
   // Handle position initialization relative to viewport on mount
   useEffect(() => {
@@ -570,11 +574,31 @@ export default function Bob({
     const particles = new THREE.Points(pGeo, pMat);
     mainGroup.add(particles);
 
-    // 6. AUDIO ENVELOPE FOLLOWER (RMS + noise gate + attack/release)
+    // 6. AUDIO ENVELOPE FOLLOWER (RMS + noise gate + attack/release + simulation fallback)
     const readAudioLevel = () => {
+      const mode = settingsRef.current.visualizerMode;
+      const status = settingsRef.current.voiceStatus;
       const analyser = analyserRef.current;
       const data = timeDomainRef.current;
-      if (!analyser || !data) return 0;
+
+      if (mode === 'simulated' || !analyser || !data) {
+        // MICROPHONE BYPASSED OR UNAVAILABLE: ANIMATE ARTIFICIALLY BASED ON VOICE STATUS
+        if (status === 'responding') {
+          const t = clock.getElapsedTime();
+          const baseWave = Math.sin(t * 14.0) * 0.35 + Math.sin(t * 6.0) * 0.25;
+          const noise = (Math.random() - 0.5) * 0.15;
+          return Math.max(0, baseWave + noise + 0.3) * 0.4;
+        }
+        if (status === 'processing') {
+          const t = clock.getElapsedTime();
+          return 0.18 + Math.sin(t * 30.0) * 0.06 + (Math.random() * 0.04);
+        }
+        if (status === 'active') {
+          const t = clock.getElapsedTime();
+          return Math.max(0, Math.sin(t * 8.0) * 0.12);
+        }
+        return 0; // standard idle breathing
+      }
 
       analyser.getByteTimeDomainData(data);
       let sumSquares = 0;
@@ -654,41 +678,8 @@ export default function Bob({
     }
     animate();
 
-    // 8. AUTOMATIC MICROPHONE (requested on mount, fails gracefully)
+    // 8. AUTOMATIC MICROPHONE (handled dynamically in dedicated useEffect)
     let cancelled = false;
-    (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((tr) => tr.stop());
-          return;
-        }
-        streamRef.current = stream;
-
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        const audioCtx = new AudioContext();
-        audioCtxRef.current = audioCtx;
-
-        const source = audioCtx.createMediaStreamSource(stream);
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 1024;
-        analyser.smoothingTimeConstant = 0.2;
-        source.connect(analyser);
-
-        analyserRef.current = analyser;
-        timeDomainRef.current = new Uint8Array(analyser.fftSize);
-      } catch (err) {
-        // Permission denied or no mic available — the orb simply stays
-        // in its idle animation state, no crash, no UI interruption.
-        console.warn('Microphone unavailable, running in idle mode.', err);
-      }
-    })();
 
     // 9. RESIZE
     const handleResize = () => {
@@ -750,21 +741,74 @@ export default function Bob({
         mount.removeChild(renderer.domElement);
       }
 
+      // Restore body scrolling
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
+  // 8. DYNAMIC MICROPHONE STREAM MANAGEMENT (OBS/YouTube compatible)
+  useEffect(() => {
+    if (visualizerMode === 'simulated') {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((tr) => tr.stop());
         streamRef.current = null;
       }
       if (audioCtxRef.current) {
-        audioCtxRef.current.close();
+        audioCtxRef.current.close().catch(() => {});
         audioCtxRef.current = null;
       }
       analyserRef.current = null;
       timeDomainRef.current = null;
+      return;
+    }
 
-      // Restore body scrolling
-      document.body.style.overflow = originalOverflow;
+    let cancelled = false;
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((tr) => tr.stop());
+          return;
+        }
+        streamRef.current = stream;
+
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+        audioCtxRef.current = audioCtx;
+
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.2;
+        source.connect(analyser);
+
+        analyserRef.current = analyser;
+        timeDomainRef.current = new Uint8Array(analyser.fftSize);
+      } catch (err) {
+        console.warn('Microphone unavailable for visualizer, running in simulated mode.', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((tr) => tr.stop());
+        streamRef.current = null;
+      }
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
+      analyserRef.current = null;
+      timeDomainRef.current = null;
     };
-  }, []);
+  }, [visualizerMode]);
 
   const textColor = jarvisColor || blobColor.bright;
   

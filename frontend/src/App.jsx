@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Navbar from './component/Navbar';
 import Bob from './component/bob';
 import Terminal from './component/Terminal';
+import Status from './component/Status';
 import { AssistantConfigProvider } from './context/AssistantConfigContext';
 import './App.css';
 
@@ -122,6 +123,8 @@ function App() {
         {/* Dynamic Cosmic Background Elements */}
         <div className="cosmic-glow cosmic-glow-1"></div>
         <div className="cosmic-glow cosmic-glow-2"></div>
+
+        <Status />
 
         <Navbar 
           blobColor={blobColor}

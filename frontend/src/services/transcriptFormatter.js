@@ -55,9 +55,9 @@ function normalizeLangKey(lang) {
   return 'hinglish';
 }
 
-async function fetchTransliteration(text, itc) {
+async function fetchTransliteration(text, itc, signal) {
   const url = `https://inputtools.google.com/request?text=${encodeURIComponent(text)}&itc=${itc}&num=1&cp=0&cs=1&ie=utf-8&oe=utf-8&app=demopage`;
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`Google Input Tools returned status ${response.status}`);
   }
@@ -68,7 +68,9 @@ async function fetchTransliteration(text, itc) {
   throw new Error("Transliteration failed");
 }
 
-async function transliterateToIndic(text, langKey) {
+const activeRequests = {};
+
+async function transliterateToIndic(text, langKey, signal) {
   if (!text) return '';
   const itc = GOOGLE_INPUT_TOOLS_MAP[langKey];
   if (!itc) return text;
@@ -81,21 +83,34 @@ async function transliterateToIndic(text, langKey) {
   const trimmedText = text.trim();
   if (!trimmedText) return text;
 
-  const cacheKey = trimmedText.toLowerCase();
+  const cacheKey = `${langKey}:${trimmedText.toLowerCase()}`;
   if (cache[cacheKey]) {
     return cache[cacheKey];
   }
 
-  try {
-    const segments = await fetchTransliteration(trimmedText, itc);
-    const transliterated = segments.map(seg => (seg[1] && seg[1].length > 0 ? seg[1][0] : seg[0])).join('');
-    
-    cache[cacheKey] = transliterated;
-    return transliterated;
-  } catch (err) {
-    console.error(`[TranscriptFormatter] Transliteration API error for "${trimmedText}":`, err);
-    return text;
+  if (activeRequests[cacheKey]) {
+    return activeRequests[cacheKey];
   }
+
+  const promise = (async () => {
+    try {
+      const segments = await fetchTransliteration(trimmedText, itc, signal);
+      const transliterated = segments.map(seg => (seg[1] && seg[1].length > 0 ? seg[1][0] : seg[0])).join('');
+      cache[cacheKey] = transliterated;
+      return transliterated;
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        throw err;
+      }
+      console.error(`[TranscriptFormatter] Transliteration API error for "${trimmedText}":`, err);
+      return text;
+    } finally {
+      delete activeRequests[cacheKey];
+    }
+  })();
+
+  activeRequests[cacheKey] = promise;
+  return promise;
 }
 
 /**
@@ -104,9 +119,10 @@ async function transliterateToIndic(text, langKey) {
  * @param {string} rawTranscript - The raw transcript from speech recognition
  * @param {string} sourceLanguage - The active listening source language
  * @param {string} displayLanguage - The target display language (name or key)
+ * @param {AbortSignal} [signal] - Optional abort signal for network requests
  * @returns {Promise<string>} The formatted transcript
  */
-export async function formatTranscript(rawTranscript, sourceLanguage, displayLanguage) {
+export async function formatTranscript(rawTranscript, sourceLanguage, displayLanguage, signal) {
   if (!rawTranscript) return '';
 
   const displayLangKey = normalizeLangKey(displayLanguage);
@@ -136,6 +152,7 @@ export async function formatTranscript(rawTranscript, sourceLanguage, displayLan
   const romanizedInput = transliterateIndianScript(rawTranscript);
 
   // Then, transliterate from Roman script to the target native Indic script
-  const transliterated = await transliterateToIndic(romanizedInput, displayLangKey);
+  const transliterated = await transliterateToIndic(romanizedInput, displayLangKey, signal);
   return transliterated;
 }
+

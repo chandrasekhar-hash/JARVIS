@@ -106,15 +106,31 @@ function SearchableDropdown({ label, options, selected, onSelect, placeholder })
   );
 }
 
+// Configurable option: Set to true to pause SpeechRecognition when assistant is responding/processing,
+// or false to keep SpeechRecognition continuously listening (ideal for future barge-in).
+const PAUSE_MIC_ON_RESPONSE = true;
+
 export default function Terminal({ terminalSettings, setTerminalSettings }) {
-  const { assistantName, wakeWords, wakeWordRequired } = useAssistantConfig();
+  const { assistantName, wakeWords, wakeWordRequired, voiceStatus, setVoiceStatus } = useAssistantConfig();
   const [rawLastFinalText, setRawLastFinalText] = useState('');
   const [rawInterim, setRawInterim]             = useState('');
-  const [status, setStatus]                     = useState('paused');
+  const status = voiceStatus;
+  const setStatus = setVoiceStatus;
   const [minimized, setMinimized]               = useState(false);
   const [noSupport, setNoSupport]               = useState(false);
-  const [isFading, setIsFading]                 = useState(false);
   const [isOff, setIsOff]                       = useState(false);
+
+  // Cleanup all timers on component unmount
+  useEffect(() => {
+    return () => {
+      if (typewriterTimer.current) clearInterval(typewriterTimer.current);
+      if (autoClearTimer.current) clearTimeout(autoClearTimer.current);
+      if (speechEndTimer.current) clearTimeout(speechEndTimer.current);
+      if (restartTimer.current) clearTimeout(restartTimer.current);
+      if (activeCountdownIntervalRef.current) clearInterval(activeCountdownIntervalRef.current);
+    };
+  }, []);
+
 
   const [listeningLang, setListeningLang] = useState(() => {
     return localStorage.getItem('jarvis-listening-lang') || 'Auto Detect';
@@ -132,8 +148,95 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
   const editableTextRef = useRef('');
   const inputRef = useRef(null);
   const [llmResponse, setLlmResponse] = useState('');
+  const [responseState, setResponseState] = useState('hidden'); // 'hidden', 'visible', 'pinned'
+  const responseStateRef = useRef('hidden');
+
+  const updateResponseState = (nextState) => {
+    responseStateRef.current = nextState;
+    setResponseState(nextState);
+  };
+
+  const scheduleAutoClear = () => {
+    if (autoClearTimer.current) clearTimeout(autoClearTimer.current);
+    updateResponseState('visible');
+    
+    autoClearTimer.current = setTimeout(() => {
+      if (responseStateRef.current === 'visible') {
+        updateResponseState('hidden');
+        setLlmResponse('');
+      }
+    }, 10000);
+  };
+
+  const handleVoiceHubClick = (e) => {
+    if (e.target.closest('.terminal-edit-input') || 
+        e.target.closest('.terminal-continue-btn') || 
+        e.target.closest('.searchable-dropdown-container') || 
+        e.target.closest('.terminal-minimize-btn') ||
+        e.target.closest('.terminal-status-indicator')) return;
+
+    if (responseStateRef.current === 'visible') {
+      updateResponseState('pinned');
+      if (autoClearTimer.current) {
+        clearTimeout(autoClearTimer.current);
+        autoClearTimer.current = null;
+      }
+    }
+  };
+
   const typewriterTimer = useRef(null);
   const autoClearTimer = useRef(null);
+
+  // Simplified Wake Word States & References
+  const [activeSecondsLeft, setActiveSecondsLeft] = useState(0);
+  const activeCountdownIntervalRef = useRef(null);
+
+  const recognitionRef  = useRef(null);
+  const restartTimer    = useRef(null);
+  const startingRef     = useRef(false);
+  const stoppedRef      = useRef(false);
+  const startTimeRef    = useRef(0);
+
+  const rawLastFinalTextRef = useRef('');
+  const rawInterimRef       = useRef('');
+  const statusRef           = useRef('standby');
+  const speechEndTimer      = useRef(null);
+  const wakeWordDetectedRef = useRef(false);
+  const retryCountRef         = useRef(0);
+  const hasTransientErrorRef  = useRef(false);
+
+  const updateStatus = (newStatus) => {
+    statusRef.current = newStatus;
+    setStatus(newStatus);
+    if (newStatus === 'listening' || newStatus === 'active') {
+      wakeWordDetectedRef.current = false;
+    }
+  };
+
+  const startActiveTimeout = () => {
+    clearActiveTimeout();
+    setActiveSecondsLeft(2);
+
+    activeCountdownIntervalRef.current = setInterval(() => {
+      setActiveSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(activeCountdownIntervalRef.current);
+          activeCountdownIntervalRef.current = null;
+          console.log(`[${assistantName} Assistant] Inactivity timeout: returning to STANDBY`);
+          updateStatus('standby');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const clearActiveTimeout = () => {
+    if (activeCountdownIntervalRef.current) {
+      clearInterval(activeCountdownIntervalRef.current);
+      activeCountdownIntervalRef.current = null;
+    }
+  };
 
   useEffect(() => {
     if (!isEditingText) {
@@ -182,10 +285,9 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
   };
 
   const parseCommand = (text) => {
-    if (!text) return { hasWakeWord: false, command: '' };
+    if (!text) return { hasWakeWord: false, isWakeOnly: false, command: '' };
     const textLower = text.toLowerCase();
     
-    // Normalization helper: trim multiple spaces, ignore punctuation, case-insensitive
     const normalize = (str) => str.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "").replace(/\s+/g, ' ').trim().toLowerCase();
     const normText = normalize(textLower);
     
@@ -194,7 +296,14 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     let matchedWakeWord = null;
     for (const wakeWord of sortedWakeWords) {
       const normWake = normalize(wakeWord);
-      if (normText.startsWith(normWake)) {
+      if (normText === normWake) {
+        return {
+          hasWakeWord: true,
+          isWakeOnly: true,
+          command: ''
+        };
+      }
+      if (normText.startsWith(normWake + ' ')) {
         matchedWakeWord = wakeWord;
         break;
       }
@@ -202,35 +311,39 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     
     if (matchedWakeWord) {
       const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Match the wake word at the start, accounting for optional punctuation and spaces
       const pattern = new RegExp("^[\\s.,\\/#!$%\\^&\\*;:{}=\\-_`~()?]*" + escapeReg(matchedWakeWord) + "[.,\\/#!$%\\^&\\*;:{}=\\-_`~()?]*\\s*", "i");
       const command = text.replace(pattern, '').trim();
       return {
         hasWakeWord: true,
+        isWakeOnly: false,
         command
       };
     }
     
     return {
       hasWakeWord: false,
+      isWakeOnly: false,
       command: text.trim()
     };
   };
 
+  const isSessionAwake = status === 'listening' || status === 'active' || status === 'processing' || status === 'responding';
+
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     async function format() {
       try {
-        const finalFormatted = await formatTranscript(rawLastFinalText, listeningLang, displayLang);
-        if (!active) return;
+        const finalFormatted = await formatTranscript(rawLastFinalText, listeningLang, displayLang, controller.signal);
         
         const { hasWakeWord, command } = parseCommand(finalFormatted);
         if (hasWakeWord) {
           wakeWordDetectedRef.current = true;
         }
 
+        const isAwake = isSessionAwake || wakeWordDetectedRef.current;
+
         if (wakeWordRequired) {
-          if (wakeWordDetectedRef.current) {
+          if (isAwake) {
             setFormattedFinalText(command);
           } else {
             setFormattedFinalText('');
@@ -239,14 +352,16 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
           setFormattedFinalText(command);
         }
       } catch (err) {
-        console.error("Failed formatting final text:", err);
+        if (err.name !== 'AbortError') {
+          console.error("Failed formatting final text:", err);
+        }
       }
     }
     format();
     return () => {
-      active = false;
+      controller.abort();
     };
-  }, [rawLastFinalText, listeningLang, displayLang, wakeWordRequired, wakeWords]);
+  }, [rawLastFinalText, listeningLang, displayLang, wakeWordRequired, wakeWords, status]);
 
   useEffect(() => {
     let active = true;
@@ -254,10 +369,17 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       setFormattedInterimText('');
       return;
     }
+    
+    // Optimize network load: 50ms for local transliteration, 300ms for network API
+    const displayLangLower = displayLang ? displayLang.toLowerCase() : 'hinglish';
+    const isLocalFormatter = displayLangLower === 'english' || displayLangLower === 'hinglish';
+    const debounceDelay = isLocalFormatter ? 50 : 300;
+
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
         const combinedRaw = (rawLastFinalText.trim() + ' ' + rawInterim.trim()).trim();
-        const combinedFormatted = await formatTranscript(combinedRaw, listeningLang, displayLang);
+        const combinedFormatted = await formatTranscript(combinedRaw, listeningLang, displayLang, controller.signal);
         if (!active) return;
 
         const { hasWakeWord, command } = parseCommand(combinedFormatted);
@@ -265,55 +387,38 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
           wakeWordDetectedRef.current = true;
         }
 
+        const isAwake = isSessionAwake || wakeWordDetectedRef.current;
+
         if (wakeWordRequired) {
-          if (wakeWordDetectedRef.current) {
-            const finalClean = parseCommand(await formatTranscript(rawLastFinalText, listeningLang, displayLang)).command;
+          if (isAwake) {
+            const finalClean = parseCommand(await formatTranscript(rawLastFinalText, listeningLang, displayLang, controller.signal)).command;
             const interimClean = command.slice(finalClean.length).trim();
             setFormattedInterimText(interimClean);
           } else {
             setFormattedInterimText('');
           }
         } else {
-          const finalClean = parseCommand(await formatTranscript(rawLastFinalText, listeningLang, displayLang)).command;
+          const finalClean = parseCommand(await formatTranscript(rawLastFinalText, listeningLang, displayLang, controller.signal)).command;
           const interimClean = command.slice(finalClean.length).trim();
           setFormattedInterimText(interimClean);
         }
       } catch (err) {
-        console.error("Failed formatting interim text:", err);
+        if (err.name !== 'AbortError') {
+          console.error("Failed formatting interim text:", err);
+        }
       }
-    }, 150);
+    }, debounceDelay);
     return () => {
       active = false;
       clearTimeout(timer);
+      controller.abort();
     };
-  }, [rawInterim, rawLastFinalText, listeningLang, displayLang, wakeWordRequired, wakeWords]);
-
+  }, [rawInterim, rawLastFinalText, listeningLang, displayLang, wakeWordRequired, wakeWords, status]);
 
   const handleToggleTerminal = (e) => {
     e.stopPropagation();
     if (noSupport) return;
     setIsOff(prev => !prev);
-  };
-
-  const recognitionRef  = useRef(null);
-  const restartTimer    = useRef(null);
-  const startingRef     = useRef(false);
-  const stoppedRef      = useRef(false);
-  const startTimeRef    = useRef(0);
-
-  const rawLastFinalTextRef = useRef('');
-  const rawInterimRef       = useRef('');
-  const statusRef           = useRef('paused');
-  const speechEndTimer      = useRef(null);
-  const fadeTimer           = useRef(null);
-  const wakeWordDetectedRef = useRef(false);
-
-  const updateStatus = (newStatus) => {
-    statusRef.current = newStatus;
-    setStatus(newStatus);
-    if (newStatus === 'listening') {
-      wakeWordDetectedRef.current = false;
-    }
   };
 
   const updateRawLastFinalText = (valOrFn) => {
@@ -330,6 +435,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
   };
 
   const typewrite = (text) => {
+    updateResponseState('visible');
     setLlmResponse('');
     let idx = 0;
     
@@ -343,24 +449,16 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
         clearInterval(typewriterTimer.current);
         typewriterTimer.current = null;
         
-        if (autoClearTimer.current) clearTimeout(autoClearTimer.current);
-        autoClearTimer.current = setTimeout(() => {
-          updateStatus('clearing');
-          setIsFading(true);
-          
-          if (fadeTimer.current) clearTimeout(fadeTimer.current);
-          fadeTimer.current = setTimeout(() => {
-            setIsFading(false);
-            setLlmResponse('');
-            updateStatus('listening');
-          }, 500);
-        }, 7000);
+        // Transition to active state and start countdown when typewriter is finished
+        updateStatus('active');
+        startActiveTimeout();
+        scheduleAutoClear();
       }
     }, 20);
   };
 
   const fetchGroqResponse = async (query) => {
-    updateStatus('thinking');
+    updateStatus('processing');
     try {
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
@@ -381,7 +479,8 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
             }
           ],
           temperature: 0.7,
-          max_tokens: 150
+          max_tokens: 150,
+          stream: true
         })
       });
 
@@ -389,59 +488,167 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
         throw new Error(`Groq API returned status ${response.status}`);
       }
 
-      const data = await response.json();
-      const reply = data.choices?.[0]?.message?.content || "No response received.";
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
       
       updateStatus('responding');
-      typewrite(reply);
+      updateResponseState('visible');
+      setLlmResponse('');
+      
+      let accumulatedText = "";
+      let buffer = "";
+      let lastUpdateTime = 0;
+      const THROTTLE_MS = 16; // Throttle to 16ms (60 FPS) for smooth rendering
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        
+        buffer = lines.pop() || "";
+        
+        let hasNewTokens = false;
+        for (const line of lines) {
+          const cleanLine = line.trim();
+          if (!cleanLine) continue;
+          if (cleanLine === "data: [DONE]") break;
+          
+          if (cleanLine.startsWith("data: ")) {
+            try {
+              const json = JSON.parse(cleanLine.slice(6));
+              const token = json.choices?.[0]?.delta?.content || "";
+              if (token) {
+                accumulatedText += token;
+                hasNewTokens = true;
+              }
+            } catch (e) {
+              // Ignore partial JSON parsing errors
+            }
+          }
+        }
+
+        if (hasNewTokens) {
+          const now = Date.now();
+          if (now - lastUpdateTime > THROTTLE_MS) {
+            setLlmResponse(accumulatedText);
+            lastUpdateTime = now;
+          }
+        }
+      }
+
+      if (buffer && buffer.startsWith("data: ")) {
+        try {
+          const json = JSON.parse(buffer.slice(6));
+          const token = json.choices?.[0]?.delta?.content || "";
+          if (token) {
+            accumulatedText += token;
+          }
+        } catch (_) {}
+      }
+
+      // Ensure final state update is applied immediately
+      setLlmResponse(accumulatedText);
+
+      // Transition to active state for follow-up command
+      updateStatus('active');
+      startActiveTimeout();
+      scheduleAutoClear();
     } catch (error) {
       console.error("[Groq API Error]", error);
       updateStatus('responding');
-      typewrite(`Error connecting to ${assistantName} core.`);
+      const errReply = `Error connecting to ${assistantName} core.`;
+      typewrite(errReply);
     }
   };
 
+  const handleWakeEvent = () => {
+    const greetingText = "Yes, Sir. How can I help you?";
+    updateStatus('responding');
+    typewrite(greetingText);
+  };
+
+  const processCommand = (command) => {
+    fetchGroqResponse(command);
+  };
+
   const handleSpeechEnded = (customCommand) => {
-    const command = (customCommand !== undefined ? customCommand : editableTextRef.current).trim();
-    if (!command) {
-      updateStatus('listening');
-      setEditableText('');
-      return;
-    }
-
-    // Ignore command if wake word is required but not detected (and not manually typed)
-    if (customCommand === undefined && wakeWordRequired && !wakeWordDetectedRef.current) {
-      console.log(`[${assistantName} Assistant] Ignored: Wake word required but not detected.`);
-      updateStatus('listening');
-      setEditableText('');
-      setFormattedFinalText('');
-      setFormattedInterimText('');
-      updateRawLastFinalText('');
-      updateRawInterim('');
-      return;
-    }
-
-    console.log(`[${assistantName} Assistant] Command ended: "${command}"`);
+    const fullInput = (customCommand !== undefined ? customCommand : editableTextRef.current).trim();
     
-    // Clear speaking texts immediately
+    // Clear previous response when new command is processed
+    if (responseStateRef.current !== 'hidden') {
+      updateResponseState('hidden');
+      setLlmResponse('');
+      if (autoClearTimer.current) {
+        clearTimeout(autoClearTimer.current);
+        autoClearTimer.current = null;
+      }
+    }
+
     updateRawLastFinalText('');
     updateRawInterim('');
     setEditableText('');
     setFormattedFinalText('');
     setFormattedInterimText('');
-    
-    // Trigger Groq query
-    fetchGroqResponse(command);
+
+    if (!fullInput) {
+      if (statusRef.current === 'active' || statusRef.current === 'listening') {
+        updateStatus('listening');
+        startActiveTimeout();
+      } else {
+        updateStatus('standby');
+      }
+      return;
+    }
+
+    console.log(`[${assistantName} Assistant] Processing speech input: "${fullInput}"`);
+
+    const parsed = parseCommand(fullInput);
+    clearActiveTimeout();
+
+    const isKeyboardOverride = customCommand !== undefined;
+    const currentState = statusRef.current;
+
+    if (wakeWordRequired && !isKeyboardOverride) {
+      if (currentState === 'standby' || currentState === 'paused') {
+        if (parsed.hasWakeWord) {
+          if (parsed.isWakeOnly) {
+            handleWakeEvent();
+          } else {
+            processCommand(parsed.command);
+          }
+        } else {
+          console.log(`[${assistantName} Assistant] Ignored: Wake word required but not detected in standby.`);
+          updateStatus('standby');
+        }
+      } else {
+        // We are already wake-active
+        if (parsed.hasWakeWord && parsed.isWakeOnly) {
+          handleWakeEvent();
+        } else {
+          const finalCommand = parsed.hasWakeWord ? parsed.command : fullInput;
+          processCommand(finalCommand);
+        }
+      }
+    } else {
+      // Wake word not required or manual typed input
+      if (parsed.hasWakeWord) {
+        if (parsed.isWakeOnly) {
+          handleWakeEvent();
+        } else {
+          processCommand(parsed.command);
+        }
+      } else {
+        processCommand(fullInput);
+      }
+    }
   };
 
   const cancelSpeechTimers = () => {
     if (speechEndTimer.current) {
       clearTimeout(speechEndTimer.current);
       speechEndTimer.current = null;
-    }
-    if (fadeTimer.current) {
-      clearTimeout(fadeTimer.current);
-      fadeTimer.current = null;
     }
     if (typewriterTimer.current) {
       clearInterval(typewriterTimer.current);
@@ -451,14 +658,13 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       clearTimeout(autoClearTimer.current);
       autoClearTimer.current = null;
     }
-    setIsFading(false);
   };
 
-  const isMicPaused = isOff || isEditingText || status === 'thinking' || status === 'responding';
+  const isMicPaused = isOff || isEditingText || (PAUSE_MIC_ON_RESPONSE && (status === 'processing' || status === 'responding'));
 
   useEffect(() => {
     if (isMicPaused) {
-      updateStatus(statusRef.current === 'thinking' || statusRef.current === 'responding' ? statusRef.current : 'paused');
+      updateStatus('paused');
       if (recognitionRef.current) {
         try { recognitionRef.current.abort(); } catch (_) {}
         recognitionRef.current = null;
@@ -490,18 +696,39 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
         if (failsafeTimer) clearTimeout(failsafeTimer);
         cancelSpeechTimers();
         startingRef.current = false;
-        // Do not force listening status if we are already thinking or responding
-        if (statusRef.current !== 'thinking' && statusRef.current !== 'responding') {
-          updateStatus('listening');
+        
+        // Reset retry states on successful start
+        retryCountRef.current = 0;
+        hasTransientErrorRef.current = false;
+        
+        const current = statusRef.current;
+        if (current !== 'processing' && current !== 'responding') {
+          if (current !== 'standby' && current !== 'active' && current !== 'listening') {
+            updateStatus('standby');
+          }
         }
       };
 
       r.onresult = (e) => {
         if (r !== recognitionRef.current) return;
-        if (statusRef.current === 'processing' || statusRef.current === 'clearing' || statusRef.current === 'thinking' || statusRef.current === 'responding') return;
+        const current = statusRef.current;
+        if (current === 'processing' || current === 'clearing' || current === 'responding') return;
+
+        // Reset response state and clear previous reply on user speaking
+        if (responseStateRef.current !== 'hidden') {
+          updateResponseState('hidden');
+          setLlmResponse('');
+          if (autoClearTimer.current) {
+            clearTimeout(autoClearTimer.current);
+            autoClearTimer.current = null;
+          }
+        }
 
         cancelSpeechTimers();
-        updateStatus('transcribing');
+
+        if (current === 'active') {
+          startActiveTimeout();
+        }
 
         let live = '';
         let final = '';
@@ -520,13 +747,20 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
             if (!trimmedFinal) return trimmedPrev;
             return trimmedPrev + ' ' + trimmedFinal;
           });
+
+          const parsed = parseCommand(final);
+          if (parsed.hasWakeWord && parsed.isWakeOnly && (statusRef.current === 'standby' || statusRef.current === 'listening' || statusRef.current === 'active')) {
+            cancelSpeechTimers();
+            handleSpeechEnded(final);
+            return;
+          }
         }
         updateRawInterim(live);
 
-        // Wait 1.5 seconds of inactivity before auto-erasing speech command
+        // Wait 600ms of inactivity before auto-erasing speech command
         speechEndTimer.current = setTimeout(() => {
           handleSpeechEnded();
-        }, 1500);
+        }, 600);
       };
  
       r.onspeechend = () => {
@@ -541,13 +775,28 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
         recognitionRef.current = null;
         startingRef.current = false;
         
-        if (statusRef.current !== 'processing' && statusRef.current !== 'clearing' && statusRef.current !== 'thinking' && statusRef.current !== 'responding') {
-          updateStatus('paused');
+        const current = statusRef.current;
+        if (current !== 'processing' && current !== 'responding' && current !== 'clearing') {
+          if (isMicPaused) {
+            updateStatus('paused');
+          }
         }
  
         if (!stoppedRef.current) {
           const duration = Date.now() - startTimeRef.current;
-          const restartDelay = duration < 2000 ? 3000 : 300;
+          let restartDelay = 100;
+          
+          if (hasTransientErrorRef.current || duration < 2000) {
+            // Apply exponential backoff for quick failures or transient errors
+            const baseDelay = 300;
+            const delay = baseDelay * Math.pow(2, retryCountRef.current);
+            retryCountRef.current++;
+            restartDelay = Math.min(delay, 3000); // capped at 3s max
+            console.log(`[SpeechRecognition] Retry #${retryCountRef.current} scheduled in ${restartDelay}ms`);
+          } else if (duration < 5000) {
+            restartDelay = 300;
+          }
+          
           clearTimeout(restartTimer.current);
           restartTimer.current = setTimeout(tryStart, restartDelay);
         }
@@ -556,12 +805,19 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       r.onerror = (e) => {
         if (r !== recognitionRef.current) return;
         
+        console.warn(`[SpeechRecognition Error] ${e.error}`);
         startingRef.current = false;
+        
         if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
           stoppedRef.current = true;
           setNoSupport(true);
           updateStatus('error');
           return;
+        }
+
+        // Flag transient errors so onend can apply backoff retry delay
+        if (e.error === 'no-speech' || e.error === 'network' || e.error === 'aborted') {
+          hasTransientErrorRef.current = true;
         }
       };
 
@@ -604,7 +860,6 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       clearTimeout(restartTimer.current);
       if (failsafeTimer) clearTimeout(failsafeTimer);
       if (speechEndTimer.current) clearTimeout(speechEndTimer.current);
-      if (fadeTimer.current) clearTimeout(fadeTimer.current);
       if (recognitionRef.current) {
         try { recognitionRef.current.abort(); } catch (_) {}
         recognitionRef.current = null;
@@ -627,10 +882,76 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
 
   const glowColorStr = hexToRgbaStr(activeColorHex, 0.45);
 
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  const handleMouseDown = (e) => {
+    if (!terminalSettings.draggable) return;
+    if (e.target.closest('.terminal-edit-input') || 
+        e.target.closest('.terminal-continue-btn') || 
+        e.target.closest('.searchable-dropdown-container') || 
+        e.target.closest('.terminal-minimize-btn')) return;
+
+    setIsDragging(true);
+
+    const wrapper = document.querySelector('.jarvis-terminal-wrapper');
+    const currentX = terminalSettings.position ? terminalSettings.position.x : (wrapper ? wrapper.getBoundingClientRect().left : (window.innerWidth - terminalSettings.width) / 2);
+    const currentY = terminalSettings.position ? terminalSettings.position.y : (wrapper ? wrapper.getBoundingClientRect().top : (window.innerHeight - 60 - 28));
+
+    setDragStart({
+      x: e.clientX - currentX,
+      y: e.clientY - currentY
+    });
+
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e) => {
+      const x = e.clientX - dragStart.x;
+      const y = e.clientY - dragStart.y;
+      setTerminalSettings(prev => ({ ...prev, position: { x, y } }));
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      setTerminalSettings(prev => {
+        localStorage.setItem('jarvis-terminal-settings', JSON.stringify(prev));
+        return prev;
+      });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragStart, setTerminalSettings]);
+
+  const positionStyle = terminalSettings.position
+    ? {
+        position: 'fixed',
+        left: `${terminalSettings.position.x}px`,
+        top: `${terminalSettings.position.y}px`,
+        bottom: 'auto',
+        transform: 'none'
+      }
+    : {};
+
+  const dragCursorStyle = terminalSettings.draggable
+    ? { cursor: isDragging ? 'grabbing' : 'grab' }
+    : {};
+
   const wrapperStyle = {
     width: `${terminalSettings.width}px`,
     maxWidth: 'calc(100vw - 20px)',
     fontFamily: terminalSettings.fontFamily || "'Share Tech Mono', 'Orbitron', monospace",
+    ...positionStyle,
+    ...dragCursorStyle
   };
 
   const panelStyle = {
@@ -650,12 +971,14 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
 
   return (
     <div 
-      className="jarvis-terminal-wrapper" 
+      className={`jarvis-terminal-wrapper ${terminalSettings.draggable ? 'draggable-active' : ''}`}
       style={wrapperStyle}
+      onMouseDown={handleMouseDown}
     >
       <div 
-        className={`jarvis-terminal-panel jarvis-terminal-capsule status-${status} ${isOff ? 'is-off' : ''}`} 
+        className={`jarvis-terminal-panel jarvis-terminal-capsule status-${status} ${isOff ? 'is-off' : ''} ${terminalSettings.draggable ? 'draggable-active' : ''} ${isDragging ? 'dragging' : ''}`} 
         style={panelStyle}
+        onClick={handleVoiceHubClick}
       >
         <div className="terminal-scanline" />
 
@@ -736,17 +1059,8 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
               </div>
             ) : isOff ? (
               <div className="terminal-empty offline">[ TERMINAL OFFLINE ]</div>
-            ) : status === 'thinking' ? (
-              <div className="terminal-live-text thinking" style={{ opacity: 0.8, color: activeColorHex }}>
-                [ JARVIS IS THINKING... ]
-              </div>
-            ) : status === 'responding' ? (
-              <div className={`terminal-live-text responding ${isFading ? 'fading' : ''}`}>
-                <span className="terminal-text-response">{llmResponse}</span>
-                <span className="terminal-cursor" />
-              </div>
             ) : isEditingText ? (
-              <div className={`terminal-live-text ${isFading ? 'fading' : ''}`} style={{ display: 'flex', width: '100%', alignItems: 'center' }}>
+              <div className="terminal-live-text" style={{ display: 'flex', width: '100%', alignItems: 'center' }}>
                 <input
                   ref={inputRef}
                   type="text"
@@ -756,7 +1070,6 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
                   onKeyDown={handleInputKeyDown}
                   onFocus={handleInputFocus}
                   onBlur={handleInputBlur}
-                  disabled={isFading}
                   placeholder="Type command..."
                   style={{ flex: 1 }}
                 />
@@ -768,20 +1081,32 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
                     setIsEditingText(false);
                     handleSpeechEnded(editableText);
                   }}
-                  disabled={isFading}
                 >
                   Continue ➔
                 </button>
                 <span className="terminal-cursor" />
               </div>
+            ) : status === 'processing' ? (
+              <div className="terminal-live-text thinking" style={{ opacity: 0.8, color: activeColorHex }}>
+                [ {assistantName.toUpperCase()} IS PROCESSING... ]
+              </div>
             ) : (formattedFinalText || formattedInterimText) ? (
-              <div className={`terminal-live-text ${isFading ? 'fading' : ''}`}>
+              <div className="terminal-live-text">
                 {formattedFinalText && <span className="terminal-text-final">{formattedFinalText}</span>}
                 {formattedInterimText && <span className="terminal-text-interim"> {formattedInterimText}</span>}
                 <span className="terminal-cursor" />
               </div>
-            ) : (status === 'listening' || status === 'transcribing') ? (
+            ) : (responseState === 'visible' || responseState === 'pinned') ? (
+              <div className="terminal-live-text responding">
+                <span className="terminal-text-response">{llmResponse}</span>
+                <span className="terminal-cursor" />
+              </div>
+            ) : status === 'active' ? (
+              <div className="terminal-empty listening">Active (listening for follow-up)... {activeSecondsLeft}s</div>
+            ) : status === 'listening' ? (
               <div className="terminal-empty listening">Listening...</div>
+            ) : status === 'standby' ? (
+              <div className="terminal-empty">[ STANDBY - Say "{assistantName}" ]</div>
             ) : (
               <div className="terminal-empty">[ SPEAK TO BEGIN ]</div>
             )}

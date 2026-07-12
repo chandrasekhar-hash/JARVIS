@@ -48,12 +48,44 @@
   }
 }
 
+.jarvis-terminal-capsule.status-standby {
+  animation: capsuleSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1), borderGlowPulse 3.5s ease-in-out infinite alternate;
+}
+
+.jarvis-terminal-capsule.status-active {
+  animation: capsuleSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1), borderGlowPulse 2.0s ease-in-out infinite alternate;
+}
+
 .jarvis-terminal-capsule.status-listening {
   animation: capsuleSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1), borderGlowPulse 2.2s ease-in-out infinite alternate;
 }
 
 .jarvis-terminal-capsule.status-transcribing {
   animation: capsuleSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1), borderGlowPulse 0.7s ease-in-out infinite alternate;
+}
+
+.jarvis-terminal-capsule.status-processing {
+  border-color: #ffb400 !important;
+  animation: capsuleSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1), borderGlowPulseProcessing 1.2s ease-in-out infinite alternate;
+}
+
+.jarvis-terminal-capsule.status-responding {
+  animation: capsuleSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1), borderGlowPulse 1.0s ease-in-out infinite alternate;
+}
+
+@keyframes borderGlowPulseProcessing {
+  0% {
+    box-shadow: 
+      0 0 30px rgba(0, 0, 0, 0.85),
+      0 0 10px rgba(255, 180, 0, 0.25),
+      inset 0 0 12px rgba(255, 180, 0, 0.04);
+  }
+  100% {
+    box-shadow: 
+      0 0 35px rgba(0, 0, 0, 0.9),
+      0 0 20px rgba(255, 180, 0, 0.45),
+      inset 0 0 20px rgba(255, 180, 0, 0.09);
+  }
 }
 
 @keyframes capsuleSlideUp {
@@ -195,6 +227,25 @@
   background-color: #555555 !important;
   box-shadow: none !important;
   animation: none !important;
+}
+
+.terminal-status-indicator.standby {
+  background-color: var(--terminal-theme-color, #00ff66);
+  opacity: 0.7;
+  box-shadow: 0 0 6px var(--terminal-theme-color, #00ff66);
+  animation: indicatorPulse 3.0s ease-in-out infinite;
+}
+
+.terminal-status-indicator.active {
+  background-color: var(--terminal-theme-color, #00ff66);
+  box-shadow: 0 0 10px var(--terminal-theme-color, #00ff66);
+  animation: indicatorPulse 1.6s ease-in-out infinite;
+}
+
+.terminal-status-indicator.responding {
+  background-color: var(--terminal-theme-color, #00ff66);
+  box-shadow: 0 0 12px var(--terminal-theme-color, #00ff66);
+  animation: indicatorPulse 0.8s ease-in-out infinite;
 }
 
 .terminal-status-indicator.listening {
@@ -679,6 +730,18 @@
 }
 
 /* Wave animation trigger styles */
+.terminal-waveform.standby .bar-1 { animation: soundWaveListening 2.2s ease-in-out infinite alternate; }
+.terminal-waveform.standby .bar-2 { animation: soundWaveListening 2.2s ease-in-out infinite alternate 0.4s; }
+.terminal-waveform.standby .bar-3 { animation: soundWaveListening 2.2s ease-in-out infinite alternate 0.8s; }
+.terminal-waveform.standby .bar-4 { animation: soundWaveListening 2.2s ease-in-out infinite alternate 0.3s; }
+.terminal-waveform.standby .bar-5 { animation: soundWaveListening 2.2s ease-in-out infinite alternate 0.6s; }
+
+.terminal-waveform.active .bar-1 { animation: soundWaveListening 0.8s ease-in-out infinite alternate; }
+.terminal-waveform.active .bar-2 { animation: soundWaveListening 0.8s ease-in-out infinite alternate 0.15s; }
+.terminal-waveform.active .bar-3 { animation: soundWaveListening 0.8s ease-in-out infinite alternate 0.3s; }
+.terminal-waveform.active .bar-4 { animation: soundWaveListening 0.8s ease-in-out infinite alternate 0.1s; }
+.terminal-waveform.active .bar-5 { animation: soundWaveListening 0.8s ease-in-out infinite alternate 0.2s; }
+
 .terminal-waveform.listening .bar-1 { animation: soundWaveListening 0.8s ease-in-out infinite alternate; }
 .terminal-waveform.listening .bar-2 { animation: soundWaveListening 0.8s ease-in-out infinite alternate 0.15s; }
 .terminal-waveform.listening .bar-3 { animation: soundWaveListening 0.8s ease-in-out infinite alternate 0.3s; }
@@ -696,6 +759,12 @@
 .terminal-waveform.thinking .bar-3 { animation: soundWaveThinking 1.0s ease-in-out infinite alternate 0.4s; }
 .terminal-waveform.thinking .bar-4 { animation: soundWaveThinking 1.0s ease-in-out infinite alternate 0.15s; }
 .terminal-waveform.thinking .bar-5 { animation: soundWaveThinking 1.0s ease-in-out infinite alternate 0.3s; }
+
+.terminal-waveform.processing .bar-1 { animation: soundWaveThinking 1.0s ease-in-out infinite alternate; }
+.terminal-waveform.processing .bar-2 { animation: soundWaveThinking 1.0s ease-in-out infinite alternate 0.2s; }
+.terminal-waveform.processing .bar-3 { animation: soundWaveThinking 1.0s ease-in-out infinite alternate 0.4s; }
+.terminal-waveform.processing .bar-4 { animation: soundWaveThinking 1.0s ease-in-out infinite alternate 0.15s; }
+.terminal-waveform.processing .bar-5 { animation: soundWaveThinking 1.0s ease-in-out infinite alternate 0.3s; }
 
 .terminal-waveform.responding .bar-1 { animation: soundWaveResponding 0.5s ease-in-out infinite alternate; }
 .terminal-waveform.responding .bar-2 { animation: soundWaveResponding 0.5s ease-in-out infinite alternate 0.1s; }
@@ -776,4 +845,28 @@
 
 .terminal-continue-btn:active {
   transform: translateY(0);
+}
+
+/* Drag-active style overrides for Terminal */
+.jarvis-terminal-panel.draggable-active {
+  border-style: dashed !important;
+}
+
+.jarvis-terminal-panel.draggable-active.dragging {
+  animation: terminalDragGlowPulse 1.0s ease-in-out infinite alternate;
+}
+
+@keyframes terminalDragGlowPulse {
+  0% {
+    box-shadow: 
+      0 0 30px rgba(0, 0, 0, 0.85),
+      0 0 10px var(--terminal-glow-color, rgba(0, 255, 102, 0.35)),
+      inset 0 0 12px rgba(0, 255, 102, 0.04);
+  }
+  100% {
+    box-shadow: 
+      0 0 45px rgba(0, 0, 0, 0.95),
+      0 0 30px var(--terminal-glow-color, rgba(0, 255, 102, 0.65)),
+      inset 0 0 25px rgba(0, 255, 102, 0.15);
+  }
 }
