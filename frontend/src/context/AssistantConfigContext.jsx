@@ -77,6 +77,42 @@ export function AssistantConfigProvider({ children }) {
     setVisualizerModeState(mode);
     localStorage.setItem('jarvis-visualizer-mode', mode);
   };
+  const [voiceGender, setVoiceGenderState] = useState(() => {
+    return localStorage.getItem('jarvis-voice-gender') || 'Female';
+  });
+
+  const updateVoiceGender = (gender) => {
+    setVoiceGenderState(gender);
+    localStorage.setItem('jarvis-voice-gender', gender);
+  };
+
+  const [creator, setCreatorState] = useState(() => {
+    // Migrate from old key 'jarvis-creator' → generic 'assistant-creator'
+    const migrated = localStorage.getItem('assistant-creator');
+    if (migrated !== null) return migrated;
+    const legacy = localStorage.getItem('jarvis-creator');
+    if (legacy !== null) {
+      localStorage.setItem('assistant-creator', legacy);
+      return legacy;
+    }
+    return 'Chandrasekhar';
+  });
+
+  const updateCreator = (name) => {
+    setCreatorState(name);
+    localStorage.setItem('assistant-creator', name);
+  };
+
+  // Voice Language: controls TTS language independently of Display Language
+  // 'auto' means follow the assistant response language (display language key)
+  const [voiceLanguage, setVoiceLanguageState] = useState(() => {
+    return localStorage.getItem('assistant-voice-language') || 'auto';
+  });
+
+  const updateVoiceLanguage = (lang) => {
+    setVoiceLanguageState(lang);
+    localStorage.setItem('assistant-voice-language', lang);
+  };
 
   const updateAssistantName = (newName) => {
     setAssistantName(newName);
@@ -100,7 +136,13 @@ export function AssistantConfigProvider({ children }) {
       statusSettings,
       updateStatusSetting,
       visualizerMode,
-      setVisualizerMode
+      setVisualizerMode,
+      voiceGender,
+      updateVoiceGender,
+      creator,
+      updateCreator,
+      voiceLanguage,
+      updateVoiceLanguage
     }}>
       {children}
     </AssistantConfigContext.Provider>

@@ -108,10 +108,10 @@ function SearchableDropdown({ label, options, selected, onSelect, placeholder })
 
 // Configurable option: Set to true to pause SpeechRecognition when assistant is responding/processing,
 // or false to keep SpeechRecognition continuously listening (ideal for future barge-in).
-const PAUSE_MIC_ON_RESPONSE = true;
+const PAUSE_MIC_ON_RESPONSE = false;
 
 export default function Terminal({ terminalSettings, setTerminalSettings }) {
-  const { assistantName, wakeWords, wakeWordRequired, voiceStatus, setVoiceStatus } = useAssistantConfig();
+  const { assistantName, wakeWords, wakeWordRequired, voiceStatus, setVoiceStatus, voiceGender, creator, voiceLanguage } = useAssistantConfig();
   const [rawLastFinalText, setRawLastFinalText] = useState('');
   const [rawInterim, setRawInterim]             = useState('');
   const status = voiceStatus;
@@ -147,7 +147,20 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
   const [isEditingText, setIsEditingText] = useState(false);
   const editableTextRef = useRef('');
   const inputRef = useRef(null);
-  const [llmResponse, setLlmResponse] = useState('');
+  const [llmResponse, setLlmResponseState] = useState('');
+  const llmResponseRef = useRef('');
+  const setLlmResponse = (valOrFn) => {
+    if (typeof valOrFn === 'function') {
+      setLlmResponseState(prev => {
+        const next = valOrFn(prev);
+        llmResponseRef.current = next;
+        return next;
+      });
+    } else {
+      llmResponseRef.current = valOrFn;
+      setLlmResponseState(valOrFn);
+    }
+  };
   const [responseState, setResponseState] = useState('hidden'); // 'hidden', 'visible', 'pinned'
   const responseStateRef = useRef('hidden');
 
@@ -201,6 +214,13 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
   const rawInterimRef       = useRef('');
   const statusRef           = useRef('standby');
   const speechEndTimer      = useRef(null);
+  const activeAudioRef      = useRef(null);
+  const activeRequestControllerRef = useRef(null);
+  const activeReaderRef     = useRef(null); // tracks the active SSE ReadableStreamDefaultReader
+  const isRequestActiveRef  = useRef(false); // mutex: prevents overlapping fetchGroqResponse calls
+  const audioQueueRef       = useRef([]);   // array of cached audio chunk URLs
+  const isPlayingAudioRef   = useRef(false); // flag representing active audio queue playback
+  const lastQueryRef        = useRef({ text: '', time: 0 });
   const wakeWordDetectedRef = useRef(false);
   const retryCountRef         = useRef(0);
   const hasTransientErrorRef  = useRef(false);
@@ -457,39 +477,167 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     }, 20);
   };
 
+  const playNextAudio = () => {
+    if (audioQueueRef.current.length === 0) {
+      isPlayingAudioRef.current = false;
+      activeAudioRef.current = null;
+      console.log("[Assistant Voice Queue] All audio chunks finished playing.");
+      if (statusRef.current === 'responding') {
+        updateStatus('active');
+        startActiveTimeout();
+        scheduleAutoClear();
+      }
+      return;
+    }
+
+    const nextChunk = audioQueueRef.current[0];
+    const textToMatch = nextChunk.text ? nextChunk.text.trim() : "";
+
+    if (textToMatch) {
+      const cleanText = (str) => str.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "").replace(/\s+/g, "").toLowerCase();
+      const cleanNextText = cleanText(textToMatch);
+      const cleanLlmResponse = cleanText(llmResponseRef.current || "");
+
+      // Wait until the text is fully printed on screen before speaking
+      if (!cleanLlmResponse.includes(cleanNextText)) {
+        console.log(`[Assistant Voice Queue] Waiting for text to display: "${textToMatch}"`);
+        setTimeout(playNextAudio, 50);
+        return;
+      }
+    }
+
+    audioQueueRef.current.shift();
+    isPlayingAudioRef.current = true;
+    const url = nextChunk.url;
+    const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const fullUrl = `${baseUrl}${url}`;
+
+    console.log(`[Assistant Voice Queue] Playing segment: ${fullUrl}`);
+    console.log(`DEBUG_LOG: [Frontend] Started playing audio segment.`);
+    const audio = new Audio(fullUrl);
+    activeAudioRef.current = audio;
+
+    updateStatus('responding');
+
+    audio.play().catch(err => {
+      console.warn("[Assistant Voice Queue] Segment playback failed or was interrupted:", err);
+      // Fall through to play next chunk
+      playNextAudio();
+    });
+
+    audio.onended = () => {
+      console.log("[Assistant Voice Queue] Segment playback finished.");
+      if (activeAudioRef.current === audio) {
+        activeAudioRef.current = null;
+      }
+      playNextAudio();
+    };
+  };
+
+  const playAssistantAudio = (url, text = "") => {
+    audioQueueRef.current.push({ url, text });
+    console.log(`DEBUG_LOG: [Frontend] Queued TTS audio for playback. Text: "${text}"`);
+    console.log(`[Assistant Voice Queue] Added segment to queue, text: "${text}", current length: ${audioQueueRef.current.length}`);
+
+    if (!isPlayingAudioRef.current) {
+      playNextAudio();
+    }
+  };
+
+  const stopAllAudio = () => {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.onended = null;
+      activeAudioRef.current.onerror = null;
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+    }
+    audioQueueRef.current = [];
+    isPlayingAudioRef.current = false;
+    console.log("[Assistant Voice Queue] Cleared all audio playback queue and stopped current audio.");
+  };
+
   const fetchGroqResponse = async (query) => {
+    const trimmedQuery = query.trim();
+    console.log(`DEBUG_LOG: [Frontend] fetchGroqResponse called with query: "${trimmedQuery}"`);
+    if (!trimmedQuery) return;
+
+    const now = Date.now();
+    if (lastQueryRef.current.text === trimmedQuery && (now - lastQueryRef.current.time) < 1000) {
+      console.warn(`[${assistantName} Assistant] Duplicate query ignored within 1s: "${trimmedQuery}"`);
+      return;
+    }
+    lastQueryRef.current = { text: trimmedQuery, time: now };
+
+    // --- Stop and clear all audio queue immediately ---
+    stopAllAudio();
+
+    // --- Cancel any previous SSE stream reader ---
+    if (activeReaderRef.current) {
+      try { activeReaderRef.current.cancel(); } catch (_) {}
+      activeReaderRef.current = null;
+    }
+
+    // --- Abort any previous fetch request ---
+    if (activeRequestControllerRef.current) {
+      activeRequestControllerRef.current.abort();
+      activeRequestControllerRef.current = null;
+    }
+
+    // Mark as active so any concurrent call that slipped through is blocked
+    isRequestActiveRef.current = true;
+
     updateStatus('processing');
+
+    const controller = new AbortController();
+    activeRequestControllerRef.current = controller;
+
     try {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      const langMap = {
+        'Hinglish': 'hinglish',
+        'English': 'english',
+        'हिन्दी': 'hindi',
+        'ଓଡ଼ିଆ': 'odia',
+        'తెలుగు': 'telugu',
+        'தமிழ்': 'tamil',
+        'ಕನ್ನಡ': 'kannada',
+        'മലയാളം': 'malayalam',
+        'বাংলা': 'bengali',
+        'ગુજરાતી': 'gujarati',
+        'ਪੰਜਾਬੀ': 'punjabi',
+        'मराठी': 'marathi'
+      };
+      // display language key — used for both LLM context and TTS when voiceLanguage is 'auto'
+      const selectedLangKey = langMap[displayLang] || 'english';
+      // tts_language: explicit selection or auto (= follow display language)
+      const ttsLangKey = (voiceLanguage && voiceLanguage !== 'auto') ? voiceLanguage : selectedLangKey;
+      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+      console.log(`DEBUG_LOG: [Frontend] Sending request to backend /api/chat...`);
+      const response = await fetch(`${baseUrl}/api/chat`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
-          messages: [
-            {
-              role: "system",
-              content: `You are ${assistantName}, a highly advanced, intelligent, and helpful AI assistant. Answer the user's question clearly, concisely, and directly. Keep responses short and conversational, suitable for a terminal interface (typically 1-3 sentences). Refer to yourself using your configured name "${assistantName}".`
-            },
-            {
-              role: "user",
-              content: query
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 150,
-          stream: true
-        })
+          message: trimmedQuery,
+          voice: voiceGender,
+          language: selectedLangKey,
+          tts_language: ttsLangKey,
+          assistant_name: assistantName,
+          creator: creator
+        }),
+        signal: controller.signal
       });
 
+      console.log(`DEBUG_LOG: [Frontend] Backend response received, status: ${response.status}`);
       if (!response.ok) {
-        throw new Error(`Groq API returned status ${response.status}`);
+        throw new Error(`API returned status ${response.status}`);
       }
 
       const reader = response.body.getReader();
+      activeReaderRef.current = reader;
       const decoder = new TextDecoder("utf-8");
+      console.log(`DEBUG_LOG: [Frontend] Received response stream from backend, starting reader loop...`);
       
       updateStatus('responding');
       updateResponseState('visible');
@@ -499,9 +647,17 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       let buffer = "";
       let lastUpdateTime = 0;
       const THROTTLE_MS = 16; // Throttle to 16ms (60 FPS) for smooth rendering
+      let receivedAudioUrl = false;
 
       while (true) {
+        // Bail out if this request was superseded by a newer one
+        if (controller.signal.aborted || activeRequestControllerRef.current !== controller) {
+          try { reader.cancel(); } catch (_) {}
+          return;
+        }
+
         const { done, value } = await reader.read();
+        console.log(`DEBUG_LOG: [Frontend] Stream reader chunk received. done: ${done}`);
         if (done) break;
         
         buffer += decoder.decode(value, { stream: true });
@@ -513,15 +669,25 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
         for (const line of lines) {
           const cleanLine = line.trim();
           if (!cleanLine) continue;
-          if (cleanLine === "data: [DONE]") break;
           
           if (cleanLine.startsWith("data: ")) {
             try {
               const json = JSON.parse(cleanLine.slice(6));
-              const token = json.choices?.[0]?.delta?.content || "";
-              if (token) {
-                accumulatedText += token;
-                hasNewTokens = true;
+              if (json.type === 'text') {
+                const token = json.content || "";
+                if (token) {
+                  accumulatedText += token;
+                  hasNewTokens = true;
+                }
+              } else if (json.type === 'audio_url') {
+                const audioUrl = json.url;
+                const sentenceText = json.text || "";
+                if (audioUrl) {
+                  receivedAudioUrl = true;
+                  playAssistantAudio(audioUrl, sentenceText);
+                }
+              } else if (json.type === 'error') {
+                console.error("[Backend TTS Error]", json.content);
               }
             } catch (e) {
               // Ignore partial JSON parsing errors
@@ -530,10 +696,10 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
         }
 
         if (hasNewTokens) {
-          const now = Date.now();
-          if (now - lastUpdateTime > THROTTLE_MS) {
+          const nowMs = Date.now();
+          if (nowMs - lastUpdateTime > THROTTLE_MS) {
             setLlmResponse(accumulatedText);
-            lastUpdateTime = now;
+            lastUpdateTime = nowMs;
           }
         }
       }
@@ -541,9 +707,18 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       if (buffer && buffer.startsWith("data: ")) {
         try {
           const json = JSON.parse(buffer.slice(6));
-          const token = json.choices?.[0]?.delta?.content || "";
-          if (token) {
-            accumulatedText += token;
+          if (json.type === 'text') {
+            const token = json.content || "";
+            if (token) {
+              accumulatedText += token;
+            }
+          } else if (json.type === 'audio_url') {
+            const audioUrl = json.url;
+            const sentenceText = json.text || "";
+            if (audioUrl) {
+              receivedAudioUrl = true;
+              playAssistantAudio(audioUrl, sentenceText);
+            }
           }
         } catch (_) {}
       }
@@ -551,22 +726,95 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       // Ensure final state update is applied immediately
       setLlmResponse(accumulatedText);
 
-      // Transition to active state for follow-up command
-      updateStatus('active');
-      startActiveTimeout();
-      scheduleAutoClear();
+      // Clean up refs if this is still the active request
+      if (activeRequestControllerRef.current === controller) {
+        activeRequestControllerRef.current = null;
+      }
+      if (activeReaderRef.current === reader) {
+        activeReaderRef.current = null;
+      }
+
+      // Transition to active state only if no audio url was received (if received, the audio.onended handles transition)
+      if (!receivedAudioUrl) {
+        updateStatus('active');
+        startActiveTimeout();
+        scheduleAutoClear();
+      }
     } catch (error) {
-      console.error("[Groq API Error]", error);
+      if (error.name === 'AbortError') {
+        console.log(`[${assistantName} Assistant] Request stream aborted successfully.`);
+        return;
+      }
+      console.error("[API Error]", error);
       updateStatus('responding');
       const errReply = `Error connecting to ${assistantName} core.`;
       typewrite(errReply);
+      
+      // Fallback transition
+      setTimeout(() => {
+        updateStatus('active');
+        startActiveTimeout();
+        scheduleAutoClear();
+      }, 3000);
+    } finally {
+      isRequestActiveRef.current = false;
     }
   };
 
-  const handleWakeEvent = () => {
-    const greetingText = "Yes, Sir. How can I help you?";
-    updateStatus('responding');
-    typewrite(greetingText);
+  const handleWakeEvent = async () => {
+    const hours = new Date().getHours();
+    let greetingPrefix = "Hello";
+    if (hours >= 5 && hours < 12) {
+      greetingPrefix = "Good Morning";
+    } else if (hours >= 12 && hours < 17) {
+      greetingPrefix = "Good Afternoon";
+    } else if (hours >= 17 && hours < 22) {
+      greetingPrefix = "Good Evening";
+    }
+
+    const creatorName = creator || "Sir";
+    const followUps = [
+      "How can I help you?",
+      "What can I do for you?",
+      "I'm listening."
+    ];
+    const followUp = followUps[Math.floor(Math.random() * followUps.length)];
+    const greetingText = `${greetingPrefix}, ${creatorName}. ${followUp}`;
+
+    // Clear previous responses and stop ongoing audio
+    stopAllAudio();
+    updateResponseState('visible');
+    setLlmResponse(greetingText);
+
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const response = await fetch(`${baseUrl}/api/tts`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          text: greetingText,
+          voice: voiceGender,
+          language: voiceLanguage && voiceLanguage !== 'auto' ? voiceLanguage : 'english'
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.url) {
+          playAssistantAudio(data.url, greetingText);
+        }
+      } else {
+        updateStatus('active');
+        startActiveTimeout();
+        scheduleAutoClear();
+      }
+    } catch (e) {
+      console.error("Local wake greeting TTS failed:", e);
+      updateStatus('active');
+      startActiveTimeout();
+      scheduleAutoClear();
+    }
   };
 
   const processCommand = (command) => {
@@ -602,6 +850,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       return;
     }
 
+    console.log(`DEBUG_LOG: [Frontend] Speech ended, fullInput: "${fullInput}"`);
     console.log(`[${assistantName} Assistant] Processing speech input: "${fullInput}"`);
 
     const parsed = parseCommand(fullInput);
@@ -711,8 +960,36 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
 
       r.onresult = (e) => {
         if (r !== recognitionRef.current) return;
-        const current = statusRef.current;
-        if (current === 'processing' || current === 'clearing' || current === 'responding') return;
+        let current = statusRef.current;
+        
+        // Barge-in Interruption: Stop active speaker and stream immediately when user speaks new word
+        if (current === 'responding' || current === 'processing') {
+          console.log("[Barge-in] Interruption detected. Aborting active stream and queue.");
+          stopAllAudio();
+          if (activeRequestControllerRef.current) {
+            activeRequestControllerRef.current.abort();
+            activeRequestControllerRef.current = null;
+          }
+          if (activeReaderRef.current) {
+            try { activeReaderRef.current.cancel(); } catch (_) {}
+            activeReaderRef.current = null;
+          }
+          setLlmResponse('');
+          if (autoClearTimer.current) {
+            clearTimeout(autoClearTimer.current);
+            autoClearTimer.current = null;
+          }
+          
+          updateStatus('listening');
+          updateRawLastFinalText('');
+          updateRawInterim('');
+          setFormattedFinalText('');
+          setFormattedInterimText('');
+          
+          current = 'listening';
+        }
+
+        if (current === 'clearing') return;
 
         // Reset response state and clear previous reply on user speaking
         if (responseStateRef.current !== 'hidden') {
@@ -739,6 +1016,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
             live += e.results[i][0].transcript;
           }
         }
+        console.log(`DEBUG_LOG: [Frontend] Speech Recognition onresult. final: "${final}", live: "${live}"`);
         if (final) {
           updateRawLastFinalText(prev => {
             const trimmedPrev = prev.trim();
@@ -757,10 +1035,14 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
         }
         updateRawInterim(live);
 
-        // Wait 600ms of inactivity before auto-erasing speech command
+        // Adaptive timeout: 450ms for longer speech, 650ms for short speech to prevent cutoff
+        const combinedRawText = (final + ' ' + live).trim();
+        const wordCount = combinedRawText.split(/\s+/).filter(Boolean).length;
+        const adaptiveTimeout = wordCount < 4 ? 650 : 450;
+
         speechEndTimer.current = setTimeout(() => {
           handleSpeechEnded();
-        }, 600);
+        }, adaptiveTimeout);
       };
  
       r.onspeechend = () => {

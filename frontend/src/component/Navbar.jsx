@@ -26,7 +26,22 @@ export default function Navbar({
   terminalSettings,
   setTerminalSettings
 }) {
-  const { assistantName, updateAssistantName, wakeWordRequired, setWakeWordRequired, statusSettings, updateStatusSetting, visualizerMode, setVisualizerMode } = useAssistantConfig();
+  const { 
+    assistantName, 
+    updateAssistantName, 
+    wakeWordRequired, 
+    setWakeWordRequired, 
+    statusSettings, 
+    updateStatusSetting, 
+    visualizerMode, 
+    setVisualizerMode,
+    voiceGender,
+    updateVoiceGender,
+    creator,
+    updateCreator,
+    voiceLanguage,
+    updateVoiceLanguage
+  } = useAssistantConfig();
   const [activeIndex, setActiveIndex] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -36,6 +51,7 @@ export default function Navbar({
   const [isInterfaceSectionOpen, setIsInterfaceSectionOpen] = useState(true);
   const [isTerminalSectionOpen, setIsTerminalSectionOpen] = useState(false);
   const [isStatusSectionOpen, setIsStatusSectionOpen] = useState(false);
+  const [isVoiceSectionOpen, setIsVoiceSectionOpen] = useState(true);
   const [settingsTheme, setSettingsTheme] = useState(() => {
     return localStorage.getItem('jarvis-settings-theme') || 'dark';
   });
@@ -586,7 +602,7 @@ export default function Navbar({
               
               <div className="column-accordion-content">
                 <div className="settings-section">
-                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>1. Edit Text Content</label>
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>1. Assistant Name</label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
                     <input
                       type="text"
@@ -605,7 +621,26 @@ export default function Navbar({
                     />
                   </div>
 
-                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>2. Wake Word Settings</label>
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>2. Creator Profile</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+                    <input
+                      type="text"
+                      value={creator}
+                      onChange={(e) => updateCreator(e.target.value)}
+                      placeholder="Enter creator name..."
+                      style={{
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        borderRadius: '10px',
+                        color: '#fff',
+                        padding: '8px 12px',
+                        fontSize: '13px',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>3. Wake Word Settings</label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#fff', fontSize: '13px' }}>
                       <input
@@ -621,7 +656,7 @@ export default function Navbar({
                     </div>
                   </div>
 
-                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>3. Font Styling</label>
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>4. Font Styling</label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
                     <select
                       value={jarvisFont}
@@ -1206,6 +1241,135 @@ export default function Navbar({
                         Reset Position to Default
                       </button>
                     )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* COLUMN 6: VOICE SETTINGS (SYS-06) */}
+            <div className={`settings-column ${isVoiceSectionOpen ? 'open' : 'collapsed'}`}>
+              <button 
+                className="column-accordion-header"
+                onClick={() => setIsVoiceSectionOpen(!isVoiceSectionOpen)}
+              >
+                <div className="header-text-group">
+                  <span className="module-tag">SYS-06</span>
+                  <h4>Voice Settings</h4>
+                </div>
+                <div className="header-status-indicator">
+                  <span className="status-label">{isVoiceSectionOpen ? 'ONLINE' : 'STANDBY'}</span>
+                  <span className={`status-dot ${isVoiceSectionOpen ? 'online' : 'standby'}`}></span>
+                  <span className="chevron-icon">{isVoiceSectionOpen ? '▼' : '▲'}</span>
+                </div>
+              </button>
+              
+              <div className="column-accordion-content">
+                <div className="settings-section">
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>1. Assistant Voice</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        className={`voice-gender-btn ${voiceGender === 'Female' ? 'active' : ''}`}
+                        onClick={() => updateVoiceGender('Female')}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          background: voiceGender === 'Female' ? 'rgba(0, 229, 255, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          border: voiceGender === 'Female' ? '1px solid #00e5ff' : '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: '8px',
+                          color: '#fff',
+                          cursor: 'pointer',
+                          fontFamily: 'var(--mono)',
+                          fontSize: '12px',
+                          fontWeight: 'bold',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        FEMALE
+                      </button>
+                      <button
+                        className={`voice-gender-btn ${voiceGender === 'Male' ? 'active' : ''}`}
+                        onClick={() => updateVoiceGender('Male')}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          background: voiceGender === 'Male' ? 'rgba(0, 229, 255, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          border: voiceGender === 'Male' ? '1px solid #00e5ff' : '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: '8px',
+                          color: '#fff',
+                          cursor: 'pointer',
+                          fontFamily: 'var(--mono)',
+                          fontSize: '12px',
+                          fontWeight: 'bold',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        MALE
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="settings-section" style={{ marginTop: '14px' }}>
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>2. Voice Language</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', fontFamily: 'var(--mono)', lineHeight: '1.4', marginBottom: '6px' }}>
+                      Selects the TTS voice language independently of Display or Listening language.
+                    </div>
+                    <select
+                      value={voiceLanguage}
+                      onChange={(e) => updateVoiceLanguage(e.target.value)}
+                      style={{
+                        background: settingsTheme === 'light' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(10, 12, 16, 0.95)',
+                        border: settingsTheme === 'light' ? '1px solid rgba(0, 0, 0, 0.15)' : '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '10px',
+                        color: settingsTheme === 'light' ? '#000' : '#fff',
+                        padding: '8px 12px',
+                        fontSize: '13px',
+                        outline: 'none',
+                        cursor: 'pointer',
+                        width: '100%'
+                      }}
+                    >
+                      <option value="auto">Auto (follows response language)</option>
+                      <option value="english">English</option>
+                      <option value="hinglish">Hinglish (Indian English)</option>
+                      <option value="hindi">हिन्दी (Hindi)</option>
+                      <option value="odia">ଓଡ଼ିଆ (Odia)</option>
+                      <option value="telugu">తెలుగు (Telugu)</option>
+                      <option value="tamil">தமிழ் (Tamil)</option>
+                      <option value="kannada">ಕನ್ನಡ (Kannada)</option>
+                      <option value="malayalam">മലയാളം (Malayalam)</option>
+                      <option value="bengali">বাংলা (Bengali)</option>
+                      <option value="gujarati">ગુજરાતી (Gujarati)</option>
+                      <option value="punjabi">ਪੰਜਾਬੀ (Punjabi)</option>
+                      <option value="marathi">मराठी (Marathi)</option>
+                    </select>
+                    {voiceLanguage !== 'auto' && (
+                      <div style={{ fontSize: '11px', color: '#00e5ff', fontFamily: 'var(--mono)', marginTop: '4px' }}>
+                        ✓ TTS locked to: <strong>{voiceLanguage.charAt(0).toUpperCase() + voiceLanguage.slice(1)}</strong>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="settings-section" style={{ borderBottom: 'none', paddingBottom: '0', marginTop: '14px' }}>
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>3. Active Display Language</label>
+                  <div style={{ 
+                    background: 'rgba(255,255,255,0.03)', 
+                    border: '1px solid rgba(255,255,255,0.1)', 
+                    padding: '12px', 
+                    borderRadius: '10px' 
+                  }}>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontFamily: 'var(--mono)', textTransform: 'uppercase' }}>
+                      Current Display Language
+                    </div>
+                    <div style={{ fontSize: '15px', color: '#00e5ff', fontWeight: 'bold', marginTop: '4px' }}>
+                      {localStorage.getItem('jarvis-display-lang') || 'English'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '8px', lineHeight: '1.3' }}>
+                      Set in the Terminal header. When Voice Language is "Auto", TTS follows this language.
+                    </div>
                   </div>
                 </div>
               </div>
