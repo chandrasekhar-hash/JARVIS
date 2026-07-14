@@ -108,7 +108,10 @@ function SearchableDropdown({ label, options, selected, onSelect, placeholder })
 
 // Configurable option: Set to true to pause SpeechRecognition when assistant is responding/processing,
 // or false to keep SpeechRecognition continuously listening (ideal for future barge-in).
-const PAUSE_MIC_ON_RESPONSE = false;
+const PAUSE_MIC_ON_RESPONSE = true;
+
+// Conversation mode: how long (seconds) of complete inactivity before returning to Wake Mode
+const CONVERSATION_TIMEOUT_SECS = 12;
 
 export default function Terminal({ terminalSettings, setTerminalSettings }) {
   const { assistantName, wakeWords, wakeWordRequired, voiceStatus, setVoiceStatus, voiceGender, creator, voiceLanguage } = useAssistantConfig();
@@ -235,15 +238,22 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
 
   const startActiveTimeout = () => {
     clearActiveTimeout();
-    setActiveSecondsLeft(2);
+    setActiveSecondsLeft(CONVERSATION_TIMEOUT_SECS);
 
     activeCountdownIntervalRef.current = setInterval(() => {
       setActiveSecondsLeft((prev) => {
+        // Never expire while the assistant is actively doing something
+        const s = statusRef.current;
+        if (s === 'responding' || s === 'processing' || s === 'listening') {
+          return prev; // hold, don't count down
+        }
         if (prev <= 1) {
           clearInterval(activeCountdownIntervalRef.current);
           activeCountdownIntervalRef.current = null;
-          console.log(`[${assistantName} Assistant] Inactivity timeout: returning to STANDBY`);
-          updateStatus('standby');
+          setTimeout(() => {
+            console.log(`[${assistantName} Assistant] Inactivity timeout: returning to STANDBY`);
+            updateStatus('standby');
+          }, 0);
           return 0;
         }
         return prev - 1;
@@ -277,7 +287,32 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     }, 60000);
   };
 
+  const handleManualBargeIn = () => {
+    const current = statusRef.current;
+    if (current === 'responding' || current === 'processing') {
+      console.log("[Barge-in] Manual override barge-in. Aborting active stream and queue.");
+      stopAllAudio();
+      if (activeRequestControllerRef.current) {
+        activeRequestControllerRef.current.abort();
+        activeRequestControllerRef.current = null;
+      }
+      if (activeReaderRef.current) {
+        try { activeReaderRef.current.cancel(); } catch (_) {}
+        activeReaderRef.current = null;
+      }
+      setLlmResponse('');
+      if (autoClearTimer.current) {
+        clearTimeout(autoClearTimer.current);
+        autoClearTimer.current = null;
+      }
+      updateResponseState('hidden');
+      updateStatus('active');
+      clearActiveTimeout();
+    }
+  };
+
   const handleInputFocus = () => {
+    handleManualBargeIn();
     cancelSpeechTimers();
     setIsEditingText(true);
     setLlmResponse('');
@@ -306,45 +341,64 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
 
   const parseCommand = (text) => {
     if (!text) return { hasWakeWord: false, isWakeOnly: false, command: '' };
-    const textLower = text.toLowerCase();
-    
-    const normalize = (str) => str.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "").replace(/\s+/g, ' ').trim().toLowerCase();
-    const normText = normalize(textLower);
-    
+
+    const originalTrimmed = text.trim();
+
+    // Strip punctuation & normalise whitespace — used for detection only (not sent to LLM)
+    const normalize = (str) =>
+      str.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?'"]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+    const normText = normalize(originalTrimmed);
+
+    // Sort longest first so "hey jarvis" is tried before bare "jarvis"
     const sortedWakeWords = [...wakeWords].sort((a, b) => b.length - a.length);
-    
+
+    // ── PASS 1: Detection on normalised text ─────────────────────────────
+    // Punctuation has already been stripped, so we use positional anchors.
+    // "(?:^|(?<=\s))" + "(?=\s|$)" gives complete-word matching without \b
+    // (which breaks on multi-word phrases like "hey jarvis").
     let matchedWakeWord = null;
+
     for (const wakeWord of sortedWakeWords) {
       const normWake = normalize(wakeWord);
+      if (!normWake) continue;
+
+      // Exact full-string → pure wake event (no command)
       if (normText === normWake) {
-        return {
-          hasWakeWord: true,
-          isWakeOnly: true,
-          command: ''
-        };
+        return { hasWakeWord: true, isWakeOnly: true, command: '' };
       }
-      if (normText.startsWith(normWake + ' ')) {
+
+      // Match as a complete phrase anywhere in the normalised sentence
+      const escaped = normWake.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const boundaryRe = new RegExp(`(?:^|(?<=\\s))${escaped}(?=\\s|$)`);
+      if (boundaryRe.test(normText)) {
         matchedWakeWord = wakeWord;
         break;
       }
     }
-    
-    if (matchedWakeWord) {
-      const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const pattern = new RegExp("^[\\s.,\\/#!$%\\^&\\*;:{}=\\-_`~()?]*" + escapeReg(matchedWakeWord) + "[.,\\/#!$%\\^&\\*;:{}=\\-_`~()?]*\\s*", "i");
-      const command = text.replace(pattern, '').trim();
-      return {
-        hasWakeWord: true,
-        isWakeOnly: false,
-        command
-      };
+
+    if (!matchedWakeWord) {
+      return { hasWakeWord: false, isWakeOnly: false, command: originalTrimmed };
     }
-    
-    return {
-      hasWakeWord: false,
-      isWakeOnly: false,
-      command: text.trim()
-    };
+
+    // ── PASS 2: Extraction from the original text ─────────────────────────
+    // Remove the matched wake phrase plus any immediately adjacent punctuation
+    // and whitespace so the remaining command is clean.
+    const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const cleanPattern = new RegExp(
+      `(^|\\s)[\\s.,!?;:'"]*${escapeReg(matchedWakeWord)}[\\s.,!?;:'"]*($|\\s)`,
+      'gi'
+    );
+
+    let command = originalTrimmed.replace(cleanPattern, ' ').replace(/\s+/g, ' ').trim();
+    // Drop any leftover leading/trailing punctuation the pattern may have missed
+    command = command.replace(/^[\s.,!?;:'"]+|[\s.,!?;:'"]+$/g, '').trim();
+
+    if (!normalize(command)) {
+      return { hasWakeWord: true, isWakeOnly: true, command: '' };
+    }
+
+    return { hasWakeWord: true, isWakeOnly: false, command };
   };
 
   const isSessionAwake = status === 'listening' || status === 'active' || status === 'processing' || status === 'responding';
@@ -484,6 +538,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       console.log("[Assistant Voice Queue] All audio chunks finished playing.");
       if (statusRef.current === 'responding') {
         updateStatus('active');
+        // Reset conversation timer — assistant just finished speaking
         startActiveTimeout();
         scheduleAutoClear();
       }
@@ -491,6 +546,9 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     }
 
     const nextChunk = audioQueueRef.current[0];
+    if (!nextChunk.waitStart) {
+      nextChunk.waitStart = Date.now();
+    }
     const textToMatch = nextChunk.text ? nextChunk.text.trim() : "";
 
     if (textToMatch) {
@@ -498,10 +556,11 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       const cleanNextText = cleanText(textToMatch);
       const cleanLlmResponse = cleanText(llmResponseRef.current || "");
 
-      // Wait until the text is fully printed on screen before speaking
-      if (!cleanLlmResponse.includes(cleanNextText)) {
-        console.log(`[Assistant Voice Queue] Waiting for text to display: "${textToMatch}"`);
-        setTimeout(playNextAudio, 50);
+      // Wait until the text is fully printed on screen before speaking, but cap at 150ms max wait
+      const timeWaiting = Date.now() - nextChunk.waitStart;
+      if (!cleanLlmResponse.includes(cleanNextText) && timeWaiting < 150) {
+        console.log(`[Assistant Voice Queue] Waiting for text to display: "${textToMatch}" (waiting ${timeWaiting}ms)`);
+        setTimeout(playNextAudio, 20); // Poll faster (20ms) for low-latency dispatch
         return;
       }
     }
@@ -586,6 +645,8 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     // Mark as active so any concurrent call that slipped through is blocked
     isRequestActiveRef.current = true;
 
+    // Hold the conversation — clear the inactivity timer while we're actively processing
+    clearActiveTimeout();
     updateStatus('processing');
 
     const controller = new AbortController();
@@ -762,29 +823,51 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
   };
 
   const handleWakeEvent = async () => {
-    const hours = new Date().getHours();
-    let greetingPrefix = "Hello";
-    if (hours >= 5 && hours < 12) {
-      greetingPrefix = "Good Morning";
-    } else if (hours >= 12 && hours < 17) {
-      greetingPrefix = "Good Afternoon";
-    } else if (hours >= 17 && hours < 22) {
-      greetingPrefix = "Good Evening";
+    const currentState = statusRef.current;
+    const isInConversation = currentState === 'active' || currentState === 'listening' || currentState === 'responding' || currentState === 'processing';
+
+    let responseText;
+
+    if (isInConversation) {
+      // Already in Conversation Mode — just acknowledge, no time-based greeting
+      const acks = [
+        "Yes?",
+        "I'm listening.",
+        "Go ahead.",
+        "How can I help?",
+        "Ready.",
+        "Tell me."
+      ];
+      responseText = acks[Math.floor(Math.random() * acks.length)];
+      console.log(`[${assistantName} Assistant] Wake word in Conversation Mode — short ack: "${responseText}"`);
+    } else {
+      // Entering from Wake Mode — full time-based greeting
+      const hours = new Date().getHours();
+      let greetingPrefix = "Hello";
+      if (hours >= 5 && hours < 12) {
+        greetingPrefix = "Good Morning";
+      } else if (hours >= 12 && hours < 17) {
+        greetingPrefix = "Good Afternoon";
+      } else if (hours >= 17 && hours < 22) {
+        greetingPrefix = "Good Evening";
+      }
+
+      const creatorName = creator || "Sir";
+      const followUps = [
+        "How can I help you?",
+        "What can I do for you?",
+        "I'm listening."
+      ];
+      const followUp = followUps[Math.floor(Math.random() * followUps.length)];
+      responseText = `${greetingPrefix}, ${creatorName}. ${followUp}`;
     }
 
-    const creatorName = creator || "Sir";
-    const followUps = [
-      "How can I help you?",
-      "What can I do for you?",
-      "I'm listening."
-    ];
-    const followUp = followUps[Math.floor(Math.random() * followUps.length)];
-    const greetingText = `${greetingPrefix}, ${creatorName}. ${followUp}`;
-
-    // Clear previous responses and stop ongoing audio
+    // Clear previous responses and stop ongoing audio; hold conversation timer during wake greeting
     stopAllAudio();
+    clearActiveTimeout();
+    updateStatus('responding');
     updateResponseState('visible');
-    setLlmResponse(greetingText);
+    setLlmResponse(responseText);
 
     try {
       const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
@@ -794,7 +877,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          text: greetingText,
+          text: responseText,
           voice: voiceGender,
           language: voiceLanguage && voiceLanguage !== 'auto' ? voiceLanguage : 'english'
         })
@@ -802,7 +885,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       if (response.ok) {
         const data = await response.json();
         if (data.url) {
-          playAssistantAudio(data.url, greetingText);
+          playAssistantAudio(data.url, responseText);
         }
       } else {
         updateStatus('active');
@@ -868,11 +951,11 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
             processCommand(parsed.command);
           }
         } else {
-          console.log(`[${assistantName} Assistant] Ignored: Wake word required but not detected in standby.`);
+          console.log(`[${assistantName} Assistant] Ignored: Wake word not detected in transcript.`);
           updateStatus('standby');
         }
       } else {
-        // We are already wake-active
+        // Conversation mode: wake word not strictly required for follow-ups
         if (parsed.hasWakeWord && parsed.isWakeOnly) {
           handleWakeEvent();
         } else {
@@ -962,7 +1045,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
         if (r !== recognitionRef.current) return;
         let current = statusRef.current;
         
-        // Barge-in Interruption: Stop active speaker and stream immediately when user speaks new word
+        // Barge-in Interruption: Stop active speaker and stream immediately when user speaks
         if (current === 'responding' || current === 'processing') {
           console.log("[Barge-in] Interruption detected. Aborting active stream and queue.");
           stopAllAudio();
@@ -980,7 +1063,9 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
             autoClearTimer.current = null;
           }
           
+          // Stay in conversation mode — barge-in does NOT reset to standby
           updateStatus('listening');
+          clearActiveTimeout(); // hold — user is actively speaking
           updateRawLastFinalText('');
           updateRawInterim('');
           setFormattedFinalText('');
@@ -1003,8 +1088,12 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
 
         cancelSpeechTimers();
 
-        if (current === 'active') {
-          startActiveTimeout();
+        // User is actively speaking — hold conversation timer regardless of mode
+        clearActiveTimeout();
+        if (current === 'standby') {
+          // Wake word mode: keep standby until wake word confirmed
+        } else {
+          updateStatus('listening');
         }
 
         let live = '';
@@ -1035,10 +1124,10 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
         }
         updateRawInterim(live);
 
-        // Adaptive timeout: 450ms for longer speech, 650ms for short speech to prevent cutoff
+        // Adaptive timeout: 450ms for longer speech, 550ms for short speech to prevent cutoff
         const combinedRawText = (final + ' ' + live).trim();
         const wordCount = combinedRawText.split(/\s+/).filter(Boolean).length;
-        const adaptiveTimeout = wordCount < 4 ? 650 : 450;
+        const adaptiveTimeout = wordCount < 4 ? 550 : 450;
 
         speechEndTimer.current = setTimeout(() => {
           handleSpeechEnded();
@@ -1166,6 +1255,12 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
 
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (!terminalSettings.draggable && isDragging) {
+      setIsDragging(false);
+    }
+  }, [terminalSettings.draggable, isDragging]);
 
   const handleMouseDown = (e) => {
     if (!terminalSettings.draggable) return;
@@ -1384,11 +1479,14 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
                 <span className="terminal-cursor" />
               </div>
             ) : status === 'active' ? (
-              <div className="terminal-empty listening">Active (listening for follow-up)... {activeSecondsLeft}s</div>
+              <div className="terminal-empty listening">
+                <span className="conv-mode-badge">💬 CONVERSATION MODE</span>
+                {' '}Listening for follow-up…
+              </div>
             ) : status === 'listening' ? (
-              <div className="terminal-empty listening">Listening...</div>
+              <div className="terminal-empty listening">🎙️ Listening…</div>
             ) : status === 'standby' ? (
-              <div className="terminal-empty">[ STANDBY - Say "{assistantName}" ]</div>
+              <div className="terminal-empty">🔴 WAKE MODE — Say <em>&ldquo;{assistantName}&rdquo;</em> to begin</div>
             ) : (
               <div className="terminal-empty">[ SPEAK TO BEGIN ]</div>
             )}

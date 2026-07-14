@@ -2,6 +2,7 @@ import uuid
 import json
 import time
 import re
+import asyncio
 from collections import OrderedDict
 import httpx
 from fastapi import FastAPI, HTTPException, Response
@@ -107,66 +108,114 @@ async def chat_endpoint(request: ChatRequest):
             detail="GROQ_API_KEY is not configured on the backend."
         )
 
+    event_queue = asyncio.Queue()
+
     async def event_generator():
-        # Clean inputs
-        lang_key = request.language.lower().strip()
-        voice_gender = request.voice.lower().strip()
-        # tts_language overrides lang_key for voice synthesis when explicitly set
-        tts_lang_key = request.tts_language.lower().strip() if request.tts_language.strip() else lang_key
-        
-        # System prompt ensuring short, calm, and confident professional assistant replies in natural Indian English.
-        # No Marvel or Iron Man reference allowed. Identity strictly built from configured values.
-        system_prompt = (
-            f"You are {request.assistant_name}, a professional, calm, and confident AI assistant created by {request.creator}. "
-            f"Provide extremely short, direct, and useful answers in natural Indian English. "
-            f"Avoid any preamble, greetings, or repeating the user's question. Answer in 1-2 sentences at most, "
-            f"unless the user explicitly asks for detailed explanations. "
-            f"Identity boundaries:\n"
-            f"- Your name is strictly: {request.assistant_name}.\n"
-            f"- Your creator is strictly: {request.creator}.\n"
-            f"- You have absolutely no connection to Tony Stark, Marvel, Iron Man, Stark Industries, or any other fictional universe or character. "
-            f"If asked about your origin, state clearly and calmly that you were created by {request.creator}."
-        )
+        # Keep yielding events until we hit the None sentinel
+        while True:
+            event = await event_queue.get()
+            if event is None:
+                break
+            yield event
 
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
+    # Clean inputs
+    lang_key = request.language.lower().strip()
+    voice_gender = request.voice.lower().strip()
+    # tts_language overrides lang_key for voice synthesis when explicitly set
+    tts_lang_key = request.tts_language.lower().strip() if request.tts_language.strip() else lang_key
+    
+    # System prompt ensuring short, calm, and confident professional assistant replies in natural Indian English.
+    # No Marvel or Iron Man reference allowed. Identity strictly built from configured values.
+    system_prompt = (
+        f"You are {request.assistant_name}, a professional, calm, and confident AI assistant created by {request.creator}. "
+        f"Provide extremely short, direct, and useful answers in natural Indian English. "
+        f"Avoid any preamble, greetings, or repeating the user's question. Answer in 1-2 sentences at most, "
+        f"unless the user explicitly asks for detailed explanations. "
+        f"Identity boundaries:\n"
+        f"- Your name is strictly: {request.assistant_name}.\n"
+        f"- Your creator is strictly: {request.creator}.\n"
+        f"- You have absolutely no connection to Tony Stark, Marvel, Iron Man, Stark Industries, or any other fictional universe or character. "
+        f"If asked about your origin, state clearly and calmly that you were created by {request.creator}."
+    )
 
-        payload = {
-            "model": "llama-3.1-8b-instant",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": request.message}
-            ],
-            "temperature": 0.6,
-            "max_tokens": 200,
-            "stream": True
-        }
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
 
-        accumulated_text = ""
+    payload = {
+        "model": "llama-3.1-8b-instant",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": request.message}
+        ],
+        "temperature": 0.6,
+        "max_tokens": 200,
+        "stream": True
+    }
+
+    async def producer_task():
         sentence_buffer = ""
+        tts_tasks = []
+        
+        # Delivery tracking to ensure TTS segments are sent in the correct order
+        completed_audios = {}
+        next_yield_index = 0
+        audio_delivery_lock = asyncio.Lock()
 
-        # Helper to synthesize a text chunk and return an SSE audio data payload
-        async def synthesize_and_yield(text_segment: str):
+        async def synthesize_task(text_segment: str, index: int):
+            nonlocal next_yield_index
             text_segment = text_segment.strip()
-            print(f"DEBUG_LOG: [Backend] Generating TTS for sentence: '{text_segment}'")
-            if text_segment:
-                try:
-                    engine = tts_manager.get_engine(TTS_ENGINE)
-                    audio_data = await engine.synthesize(
-                        text=text_segment,
-                        voice=voice_gender,
-                        language=tts_lang_key
-                    )
-                    audio_id = str(uuid.uuid4())
-                    audio_cache.set(audio_id, audio_data)
-                    return f"data: {json.dumps({'type': 'audio_url', 'url': f'/api/audio/{audio_id}', 'text': text_segment})}\n\n"
-                except Exception as e:
-                    return f"data: {json.dumps({'type': 'error', 'content': f'TTS synthesis failed: {str(e)}'})}\n\n"
-            return None
+            
+            # Check if segment contains any alphanumeric character
+            clean_segment = re.sub(r'[^\w\s]', '', text_segment).strip()
+            if not clean_segment:
+                print(f"DEBUG_LOG: [Backend] Background TTS skipped empty/punctuation-only segment [{index}]: '{text_segment}'")
+                async with audio_delivery_lock:
+                    completed_audios[index] = ""  # empty placeholder
+                    while next_yield_index in completed_audios:
+                        payload = completed_audios[next_yield_index]
+                        if payload:
+                            await event_queue.put(payload)
+                        del completed_audios[next_yield_index]
+                        next_yield_index += 1
+                return
 
-        # 1. Stream the LLM response text chunk-by-chunk for live UI rendering
+            print(f"DEBUG_LOG: [Backend] Background TTS started for sentence [{index}]: '{text_segment}'")
+            try:
+                engine = tts_manager.get_engine(TTS_ENGINE)
+                audio_data = await engine.synthesize(
+                    text=text_segment,
+                    voice=voice_gender,
+                    language=tts_lang_key
+                )
+                audio_id = str(uuid.uuid4())
+                audio_cache.set(audio_id, audio_data)
+                
+                event_data = f"data: {json.dumps({'type': 'audio_url', 'url': f'/api/audio/{audio_id}', 'text': text_segment})}\n\n"
+                
+                async with audio_delivery_lock:
+                    completed_audios[index] = event_data
+                    while next_yield_index in completed_audios:
+                        payload = completed_audios[next_yield_index]
+                        if payload:
+                            await event_queue.put(payload)
+                        del completed_audios[next_yield_index]
+                        next_yield_index += 1
+                print(f"DEBUG_LOG: [Backend] Background TTS completed for sentence [{index}]")
+            except Exception as e:
+                err_event = f"data: {json.dumps({'type': 'error', 'content': f'TTS synthesis failed: {str(e)}'})}\n\n"
+                async with audio_delivery_lock:
+                    completed_audios[index] = err_event
+                    while next_yield_index in completed_audios:
+                        payload = completed_audios[next_yield_index]
+                        if payload:
+                            await event_queue.put(payload)
+                        del completed_audios[next_yield_index]
+                        next_yield_index += 1
+
+        sentence_index = 0
+
         async with httpx.AsyncClient() as client:
             try:
                 print(f"DEBUG_LOG: [Backend] Calling Groq API...")
@@ -179,14 +228,14 @@ async def chat_endpoint(request: ChatRequest):
                 ) as response:
                     print(f"DEBUG_LOG: [Backend] Groq API stream established. Status: {response.status_code}")
                     if response.status_code != 200:
-                        yield f"data: {json.dumps({'type': 'error', 'content': f'Groq API error status {response.status_code}'})}\n\n"
+                        await event_queue.put(f"data: {json.dumps({'type': 'error', 'content': f'Groq API error status {response.status_code}'})}\n\n")
+                        await event_queue.put(None)
                         return
 
                     async for line in response.aiter_lines():
                         line = line.strip()
                         if not line:
                             continue
-                        print(f"DEBUG_LOG: [Backend] Groq streamed line: {line[:50]}...")
                         if line == "data: [DONE]":
                             break
                         if line.startswith("data: "):
@@ -194,34 +243,46 @@ async def chat_endpoint(request: ChatRequest):
                                 data = json.loads(line[6:])
                                 token = data["choices"][0]["delta"].get("content", "")
                                 if token:
-                                    accumulated_text += token
                                     sentence_buffer += token
-                                    yield f"data: {json.dumps({'type': 'text', 'content': token})}\n\n"
+                                    # Forward text tokens instantly to the client
+                                    await event_queue.put(f"data: {json.dumps({'type': 'text', 'content': token})}\n\n")
                                     
-                                    # Check for complete sentences followed by space
+                                    # Extract sentences for parallel synthesis
                                     while True:
                                         match = re.search(r'(.*?[.!?]+)\s+', sentence_buffer)
                                         if match:
                                             sentence = match.group(1).strip()
                                             if len(sentence) >= 3:
-                                                audio_event = await synthesize_and_yield(sentence)
-                                                if audio_event:
-                                                    yield audio_event
+                                                # Spawn parallel background task for synthesis
+                                                task = asyncio.create_task(synthesize_task(sentence, sentence_index))
+                                                tts_tasks.append(task)
+                                                sentence_index += 1
                                             sentence_buffer = sentence_buffer[match.end():]
                                         else:
                                             break
                             except Exception:
                                 pass
             except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Connection failed: {str(e)}'})}\n\n"
+                await event_queue.put(f"data: {json.dumps({'type': 'error', 'content': f'Connection failed: {str(e)}'})}\n\n")
+                await event_queue.put(None)
                 return
+            finally:
+                # Process remainder text left in buffer
+                final_sentence = sentence_buffer.strip()
+                if len(final_sentence) >= 2:
+                    task = asyncio.create_task(synthesize_task(final_sentence, sentence_index))
+                    tts_tasks.append(task)
+                    sentence_index += 1
 
-        # 2. Synthesize audio for any final remainder text left in the sentence buffer
-        final_sentence = sentence_buffer.strip()
-        if len(final_sentence) >= 2:
-            audio_event = await synthesize_and_yield(final_sentence)
-            if audio_event:
-                yield audio_event
+                # Wait for all background synthesis tasks to complete
+                if tts_tasks:
+                    await asyncio.gather(*tts_tasks, return_exceptions=True)
+                
+                # Signal event_generator to exit
+                await event_queue.put(None)
+
+    # Spawn the producer task to run in the background concurrently
+    asyncio.create_task(producer_task())
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

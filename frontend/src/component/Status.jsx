@@ -11,6 +11,12 @@ export default function Status() {
   const localDragPositionRef = useRef(null);
   const containerRef = useRef(null);
 
+  useEffect(() => {
+    if (!statusSettings.draggable && isDragging) {
+      setIsDragging(false);
+    }
+  }, [statusSettings.draggable, isDragging]);
+
   // Check Groq API Connectivity
   const isApiConnected = !!import.meta.env.VITE_GROQ_API_KEY;
 

@@ -98,7 +98,7 @@ function App() {
           borderRadius: 12,
           bgOpacity: 0.85,
           borderGlow: 0.45,
-          draggable: true,
+          draggable: false,
           position: null,
           colorTheme: '#00ff66',
           ...parsed
@@ -111,7 +111,7 @@ function App() {
       borderRadius: 12,
       bgOpacity: 0.85,
       borderGlow: 0.45,
-      draggable: true,
+      draggable: false,
       position: null,
       colorTheme: '#00ff66'
     };
