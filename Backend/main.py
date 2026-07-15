@@ -7,13 +7,49 @@ from collections import OrderedDict
 import httpx
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
+import psutil
+import signal
+import atexit
+import os
 
 from config import GROQ_API_KEY, TTS_ENGINE
 from tts_engines import tts_manager
+from tools.router import handle_agent_chat
+from tools.startup import verify_startup
+from tools.telemetry import task_watchdog, telemetry_manager, log_structured, backend_log, request_id_var
 
 app = FastAPI(title="J.A.R.V.I.S. Core Backend API")
+
+def shutdown_handler():
+    print("DEBUG_LOG: [Shutdown] Shutdown/interruption signal received. Cleaning resources...")
+    task_watchdog.cancel_all_tasks()
+    from tools.locks import destructive_lock, _tool_locks
+    try:
+        if destructive_lock.locked():
+            destructive_lock.release()
+        for lock in _tool_locks.values():
+            if lock.locked():
+                lock.release()
+    except Exception:
+        pass
+    print("DEBUG_LOG: [Shutdown] Clean recovery completed.")
+
+@app.on_event("startup")
+def startup_event():
+    # Start task watchdog
+    task_watchdog.start_watchdog()
+    # Run startup verification (fails fast if keys or directories missing)
+    verify_startup()
+    
+    # Register shutdown signals / exit handlers for recovery
+    try:
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, shutdown_handler)
+    except (NotImplementedError, ValueError):
+        atexit.register(shutdown_handler)
 
 # Enable CORS for frontend requests
 app.add_middleware(
@@ -99,24 +135,93 @@ async def tts_endpoint(request: TTSRequest):
             detail=f"TTS synthesis failed: {str(e)}"
         )
 
+@app.get("/health")
+def health_endpoint():
+    return {"status": "healthy"}
+
+@app.get("/ready")
+async def ready_endpoint():
+    details = {}
+    is_ready = True
+    
+    # 1. Config Check
+    has_key = bool(os.getenv("GROQ_API_KEY") or os.getenv("VITE_GROQ_API_KEY"))
+    details["configuration"] = "valid" if has_key else "missing_key"
+    if not has_key:
+        is_ready = False
+        
+    # 2. Tool Registry Check
+    from tools.registry import registry
+    num_tools = len(registry.get_tool_schemas())
+    details["tool_registry"] = f"active ({num_tools} tools)" if num_tools > 0 else "empty"
+    if num_tools == 0:
+        is_ready = False
+        
+    # 3. Filesystem Check
+    desktop_exists = os.path.exists(os.path.join(os.path.expanduser("~"), "Desktop"))
+    details["filesystem"] = "accessible" if desktop_exists else "restricted"
+    
+    # 4. Groq Connection Check
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.get("https://api.groq.com", timeout=3.0)
+            details["groq_connectivity"] = "connected"
+    except Exception:
+        details["groq_connectivity"] = "unreachable"
+        is_ready = False
+        
+    # 5. TTS Check
+    try:
+        from tts_engines import tts_manager
+        details["edge_tts"] = "available"
+    except Exception:
+        details["edge_tts"] = "failed"
+        is_ready = False
+        
+    status_code = 200 if is_ready else 503
+    return JSONResponse(status_code=status_code, content={"ready": is_ready, "details": details})
+
+@app.get("/metrics")
+def metrics_endpoint():
+    summary = telemetry_manager.get_summary()
+    active_list = []
+    for tid, info in task_watchdog.tasks.items():
+        active_list.append({
+            "task_id": tid,
+            "description": info["description"],
+            "elapsed": round(time.time() - info["start_time"], 2)
+        })
+    summary["active_tasks"] = active_list
+    return summary
+
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
-    print(f"DEBUG_LOG: [Backend] Request reached chat_endpoint with message: {request.message}")
-    if not GROQ_API_KEY:
-        raise HTTPException(
-            status_code=500, 
-            detail="GROQ_API_KEY is not configured on the backend."
-        )
+    req_id = str(uuid.uuid4())
+    request_id_var.set(req_id)
+    log_structured(backend_log, "INFO", f"Request reached chat_endpoint with message: {request.message}")
+    telemetry_manager.increment_counter("active_conversations")
 
     event_queue = asyncio.Queue()
+    prod_task = None
 
     async def event_generator():
-        # Keep yielding events until we hit the None sentinel
-        while True:
-            event = await event_queue.get()
-            if event is None:
-                break
-            yield event
+        try:
+            while True:
+                event = await event_queue.get()
+                if event is None:
+                    break
+                yield event
+        except asyncio.CancelledError:
+            print("DEBUG_LOG: [Backend] Client connection cancelled. Cleaning up tasks...")
+            if prod_task and not prod_task.done():
+                prod_task.cancel()
+            from tools.logger import log_backend_cancellation
+            log_backend_cancellation("producer_task")
+            raise
+        finally:
+            telemetry_manager.decrement_counter("active_conversations")
+            if prod_task and not prod_task.done():
+                prod_task.cancel()
 
     # Clean inputs
     lang_key = request.language.lower().strip()
@@ -182,6 +287,7 @@ async def chat_endpoint(request: ChatRequest):
                 return
 
             print(f"DEBUG_LOG: [Backend] Background TTS started for sentence [{index}]: '{text_segment}'")
+            t_start = time.time()
             try:
                 engine = tts_manager.get_engine(TTS_ENGINE)
                 audio_data = await engine.synthesize(
@@ -189,6 +295,9 @@ async def chat_endpoint(request: ChatRequest):
                     voice=voice_gender,
                     language=tts_lang_key
                 )
+                elapsed = time.time() - t_start
+                telemetry_manager.record_latency("tts_latency", elapsed)
+                telemetry_manager.increment_counter("tts_requests")
                 audio_id = str(uuid.uuid4())
                 audio_cache.set(audio_id, audio_data)
                 
@@ -216,74 +325,52 @@ async def chat_endpoint(request: ChatRequest):
 
         sentence_index = 0
 
-        async with httpx.AsyncClient() as client:
-            try:
-                print(f"DEBUG_LOG: [Backend] Calling Groq API...")
-                async with client.stream(
-                    "POST", 
-                    "https://api.groq.com/openai/v1/chat/completions", 
-                    headers=headers, 
-                    json=payload, 
-                    timeout=20.0
-                ) as response:
-                    print(f"DEBUG_LOG: [Backend] Groq API stream established. Status: {response.status_code}")
-                    if response.status_code != 200:
-                        await event_queue.put(f"data: {json.dumps({'type': 'error', 'content': f'Groq API error status {response.status_code}'})}\n\n")
-                        await event_queue.put(None)
-                        return
-
-                    async for line in response.aiter_lines():
-                        line = line.strip()
-                        if not line:
-                            continue
-                        if line == "data: [DONE]":
-                            break
-                        if line.startswith("data: "):
-                            try:
-                                data = json.loads(line[6:])
-                                token = data["choices"][0]["delta"].get("content", "")
-                                if token:
-                                    sentence_buffer += token
-                                    # Forward text tokens instantly to the client
-                                    await event_queue.put(f"data: {json.dumps({'type': 'text', 'content': token})}\n\n")
-                                    
-                                    # Extract sentences for parallel synthesis
-                                    while True:
-                                        match = re.search(r'(.*?[.!?]+)\s+', sentence_buffer)
-                                        if match:
-                                            sentence = match.group(1).strip()
-                                            if len(sentence) >= 3:
-                                                # Spawn parallel background task for synthesis
-                                                task = asyncio.create_task(synthesize_task(sentence, sentence_index))
-                                                tts_tasks.append(task)
-                                                sentence_index += 1
-                                            sentence_buffer = sentence_buffer[match.end():]
-                                        else:
-                                            break
-                            except Exception:
-                                pass
-            except Exception as e:
-                await event_queue.put(f"data: {json.dumps({'type': 'error', 'content': f'Connection failed: {str(e)}'})}\n\n")
-                await event_queue.put(None)
-                return
-            finally:
-                # Process remainder text left in buffer
-                final_sentence = sentence_buffer.strip()
-                if len(final_sentence) >= 2:
-                    task = asyncio.create_task(synthesize_task(final_sentence, sentence_index))
-                    tts_tasks.append(task)
-                    sentence_index += 1
-
-                # Wait for all background synthesis tasks to complete
-                if tts_tasks:
-                    await asyncio.gather(*tts_tasks, return_exceptions=True)
+        try:
+            print(f"DEBUG_LOG: [Backend] Routing query to Agent Router...")
+            async for token in handle_agent_chat(
+                message=request.message,
+                assistant_name=request.assistant_name,
+                creator=request.creator
+            ):
+                sentence_buffer += token
+                # Forward text tokens instantly to the client
+                await event_queue.put(f"data: {json.dumps({'type': 'text', 'content': token})}\n\n")
                 
-                # Signal event_generator to exit
-                await event_queue.put(None)
+                # Extract sentences for parallel synthesis
+                while True:
+                    match = re.search(r'(.*?[.!?]+)\s+', sentence_buffer)
+                    if match:
+                        sentence = match.group(1).strip()
+                        if len(sentence) >= 3:
+                            # Spawn parallel background task for synthesis
+                            task = asyncio.create_task(synthesize_task(sentence, sentence_index))
+                            tts_tasks.append(task)
+                            sentence_index += 1
+                        sentence_buffer = sentence_buffer[match.end():]
+                    else:
+                        break
+        except Exception as e:
+            await event_queue.put(f"data: {json.dumps({'type': 'error', 'content': f'Agent processing failed: {str(e)}'})}\n\n")
+            await event_queue.put(None)
+            return
+        finally:
+            # Process remainder text left in buffer
+            final_sentence = sentence_buffer.strip()
+            if len(final_sentence) >= 2:
+                task = asyncio.create_task(synthesize_task(final_sentence, sentence_index))
+                tts_tasks.append(task)
+                sentence_index += 1
 
-    # Spawn the producer task to run in the background concurrently
-    asyncio.create_task(producer_task())
+            # Wait for all background synthesis tasks to complete
+            if tts_tasks:
+                await asyncio.gather(*tts_tasks, return_exceptions=True)
+            
+            # Signal event_generator to exit
+            await event_queue.put(None)
 
+    # Spawn the producer task and save reference for cancellation tracking
+    prod_task = asyncio.create_task(producer_task())
+    task_watchdog.register_task(prod_task, f"chat_producer::{req_id}", timeout=60.0)
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 if __name__ == "__main__":

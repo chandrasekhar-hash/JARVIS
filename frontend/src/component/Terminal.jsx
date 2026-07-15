@@ -108,7 +108,7 @@ function SearchableDropdown({ label, options, selected, onSelect, placeholder })
 
 // Configurable option: Set to true to pause SpeechRecognition when assistant is responding/processing,
 // or false to keep SpeechRecognition continuously listening (ideal for future barge-in).
-const PAUSE_MIC_ON_RESPONSE = true;
+const PAUSE_MIC_ON_RESPONSE = false;
 
 // Conversation mode: how long (seconds) of complete inactivity before returning to Wake Mode
 const CONVERSATION_TIMEOUT_SECS = 12;
@@ -580,9 +580,16 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
 
     audio.play().catch(err => {
       console.warn("[Assistant Voice Queue] Segment playback failed or was interrupted:", err);
-      // Fall through to play next chunk
       playNextAudio();
     });
+
+    audio.onerror = (e) => {
+      console.warn("[Assistant Voice Queue] Segment load error encountered:", e);
+      if (activeAudioRef.current === audio) {
+        activeAudioRef.current = null;
+      }
+      playNextAudio();
+    };
 
     audio.onended = () => {
       console.log("[Assistant Voice Queue] Segment playback finished.");
@@ -594,6 +601,11 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
   };
 
   const playAssistantAudio = (url, text = "") => {
+    const cleanChunk = text.replace(/[^\w\s]/g, "").trim();
+    if (!cleanChunk && text) {
+      console.log(`[Assistant Voice Queue] Skipping punctuation/empty audio chunk: "${text}"`);
+      return;
+    }
     audioQueueRef.current.push({ url, text });
     console.log(`DEBUG_LOG: [Frontend] Queued TTS audio for playback. Text: "${text}"`);
     console.log(`[Assistant Voice Queue] Added segment to queue, text: "${text}", current length: ${audioQueueRef.current.length}`);
@@ -1047,6 +1059,15 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
         
         // Barge-in Interruption: Stop active speaker and stream immediately when user speaks
         if (current === 'responding' || current === 'processing') {
+          const cleanForEcho = (str) => str.replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+          const userClean = cleanForEcho(final + ' ' + live);
+          const assistantClean = cleanForEcho((llmResponseRef.current || "") + " " + (audioQueueRef.current.map(q => q.text).join(" ")));
+          
+          if (userClean && assistantClean.includes(userClean)) {
+            console.log(`[Echo Filter] Suppressed feedback echo: "${userClean}"`);
+            return;
+          }
+          
           console.log("[Barge-in] Interruption detected. Aborting active stream and queue.");
           stopAllAudio();
           if (activeRequestControllerRef.current) {
