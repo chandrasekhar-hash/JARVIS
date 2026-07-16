@@ -69,6 +69,68 @@ export function AssistantConfigProvider({ children }) {
     });
   };
 
+  const [envWidgetSettings, setEnvWidgetSettingsState] = useState(() => {
+    const saved = localStorage.getItem('jarvis-env-widget-settings');
+    if (saved) {
+      try {
+        return {
+          titleText: 'ENVIRONMENT MATRIX',
+          colorTheme: '#00ff66',
+          textColor: '#ffffff',
+          scale: 1,
+          draggable: false,
+          ...JSON.parse(saved)
+        };
+      } catch (e) {}
+    }
+    return {
+      titleText: 'ENVIRONMENT MATRIX',
+      colorTheme: '#00ff66',
+      textColor: '#ffffff',
+      scale: 1,
+      draggable: false
+    };
+  });
+
+  const updateEnvWidgetSetting = (key, value) => {
+    setEnvWidgetSettingsState(prev => {
+      const updated = { ...prev, [key]: value };
+      localStorage.setItem('jarvis-env-widget-settings', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const [connWidgetSettings, setConnWidgetSettingsState] = useState(() => {
+    const saved = localStorage.getItem('jarvis-conn-widget-settings');
+    if (saved) {
+      try {
+        return {
+          titleText: 'HARDWARE LINK STATE',
+          colorTheme: '#00ff66',
+          textColor: '#ffffff',
+          scale: 1,
+          draggable: false,
+          ...JSON.parse(saved)
+        };
+      } catch (e) {}
+    }
+    return {
+      titleText: 'HARDWARE LINK STATE',
+      colorTheme: '#00ff66',
+      textColor: '#ffffff',
+      scale: 1,
+      draggable: false
+    };
+  });
+
+  const updateConnWidgetSetting = (key, value) => {
+    setConnWidgetSettingsState(prev => {
+      const updated = { ...prev, [key]: value };
+      localStorage.setItem('jarvis-conn-widget-settings', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const [visualizerMode, setVisualizerModeState] = useState(() => {
     return localStorage.getItem('jarvis-visualizer-mode') || 'real';
   });
@@ -135,6 +197,10 @@ export function AssistantConfigProvider({ children }) {
       setVoiceStatus,
       statusSettings,
       updateStatusSetting,
+      envWidgetSettings,
+      updateEnvWidgetSetting,
+      connWidgetSettings,
+      updateConnWidgetSetting,
       visualizerMode,
       setVisualizerMode,
       voiceGender,

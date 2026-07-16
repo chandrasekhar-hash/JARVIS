@@ -33,6 +33,10 @@ export default function Navbar({
     setWakeWordRequired, 
     statusSettings, 
     updateStatusSetting, 
+    envWidgetSettings,
+    updateEnvWidgetSetting,
+    connWidgetSettings,
+    updateConnWidgetSetting,
     visualizerMode, 
     setVisualizerMode,
     voiceGender,
@@ -51,10 +55,45 @@ export default function Navbar({
   const [isInterfaceSectionOpen, setIsInterfaceSectionOpen] = useState(true);
   const [isTerminalSectionOpen, setIsTerminalSectionOpen] = useState(false);
   const [isStatusSectionOpen, setIsStatusSectionOpen] = useState(false);
+  const [isEnvSectionOpen, setIsEnvSectionOpen] = useState(false);
+  const [isConnSectionOpen, setIsConnSectionOpen] = useState(false);
   const [isVoiceSectionOpen, setIsVoiceSectionOpen] = useState(true);
   const [settingsTheme, setSettingsTheme] = useState(() => {
     return localStorage.getItem('jarvis-settings-theme') || 'dark';
   });
+
+  // Env widget position state
+  const [envPos, setEnvPos] = useState(() => {
+    try {
+      const saved = localStorage.getItem('jarvis-widget-env-pos');
+      return saved ? JSON.parse(saved) : { x: 24, y: 110 };
+    } catch { return { x: 24, y: 110 }; }
+  });
+  const [isDraggingEnvMap, setIsDraggingEnvMap] = useState(false);
+  const envMapRef = useRef(null);
+
+  const setEnvPosAndSync = (newPos) => {
+    setEnvPos(newPos);
+    localStorage.setItem('jarvis-widget-env-pos', JSON.stringify(newPos));
+    window.dispatchEvent(new CustomEvent('jarvis-env-pos-change', { detail: newPos }));
+  };
+
+  // Conn widget position state
+  const [connPos, setConnPos] = useState(() => {
+    try {
+      const saved = localStorage.getItem('jarvis-widget-conn-pos');
+      return saved ? JSON.parse(saved) : { x: 24, y: 395 };
+    } catch { return { x: 24, y: 395 }; }
+  });
+  const [isDraggingConnMap, setIsDraggingConnMap] = useState(false);
+  const connMapRef = useRef(null);
+
+  const setConnPosAndSync = (newPos) => {
+    setConnPos(newPos);
+    localStorage.setItem('jarvis-widget-conn-pos', JSON.stringify(newPos));
+    window.dispatchEvent(new CustomEvent('jarvis-conn-pos-change', { detail: newPos }));
+  };
+
   const navbarRef = useRef(null);
   const settingsPanelRef = useRef(null);
   const settingsRectRef = useRef(null);
@@ -1241,6 +1280,572 @@ export default function Navbar({
                         Reset Position to Default
                       </button>
                     )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* COLUMN 7: ENVIRONMENT HUD CONFIGURATION (SYS-07) */}
+            <div className={`settings-column ${isEnvSectionOpen ? 'open' : 'collapsed'}`}>
+              <button 
+                className="column-accordion-header"
+                onClick={() => setIsEnvSectionOpen(!isEnvSectionOpen)}
+              >
+                <div className="header-text-group">
+                  <span className="module-tag">SYS-07</span>
+                  <h4>Env HUD Config</h4>
+                </div>
+                <div className="header-status-indicator">
+                  <span className="status-label">{isEnvSectionOpen ? 'ONLINE' : 'STANDBY'}</span>
+                  <span className={`status-dot ${isEnvSectionOpen ? 'online' : 'standby'}`}></span>
+                  <span className="chevron-icon">{isEnvSectionOpen ? '▼' : '▲'}</span>
+                </div>
+              </button>
+              
+              <div className="column-accordion-content">
+                {/* Title Text */}
+                <div className="settings-section">
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>1. Custom Title Text</label>
+                  <input
+                    type="text"
+                    value={envWidgetSettings.titleText}
+                    onChange={(e) => updateEnvWidgetSetting('titleText', e.target.value)}
+                    placeholder="ENVIRONMENT MATRIX"
+                    style={{
+                      width: '100%',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      padding: '8px 12px',
+                      fontSize: '13px',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {/* Theme Color */}
+                <div className="settings-section">
+                  <label className="section-label">2. Widget Theme Color</label>
+                  <div className="custom-color-picker-container" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
+                    <input
+                      type="color"
+                      value={envWidgetSettings.colorTheme || statusSettings.colorTheme}
+                      onChange={(e) => updateEnvWidgetSetting('colorTheme', e.target.value)}
+                      className="custom-color-input"
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'transparent',
+                        width: '40px',
+                        height: '40px',
+                        cursor: 'pointer',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        padding: '0'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', fontFamily: 'var(--mono)', color: 'var(--accent)', fontWeight: 'bold' }}>
+                      {(envWidgetSettings.colorTheme || statusSettings.colorTheme).toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Text Color */}
+                <div className="settings-section">
+                  <label className="section-label">3. Text Color</label>
+                  <div className="custom-color-picker-container" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
+                    <input
+                      type="color"
+                      value={envWidgetSettings.textColor || statusSettings.textColor}
+                      onChange={(e) => updateEnvWidgetSetting('textColor', e.target.value)}
+                      className="custom-color-input"
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'transparent',
+                        width: '40px',
+                        height: '40px',
+                        cursor: 'pointer',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        padding: '0'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', fontFamily: 'var(--mono)', color: 'var(--accent)', fontWeight: 'bold' }}>
+                      {(envWidgetSettings.textColor || statusSettings.textColor).toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Drag & Drop Toggle + Position Controls */}
+                <div className="settings-section" style={{ borderBottom: 'none', paddingBottom: '0' }}>
+                  <label className="section-label">4. Drag & Position</label>
+
+                  {/* Drag toggle */}
+                  <button
+                    className={`btn-drag-toggle ${envWidgetSettings.draggable ? 'active' : ''}`}
+                    onClick={() => updateEnvWidgetSetting('draggable', !envWidgetSettings.draggable)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      marginTop: '8px',
+                      marginBottom: '12px',
+                      borderRadius: '10px',
+                      background: envWidgetSettings.draggable
+                        ? 'rgba(0,255,102,0.18)'
+                        : 'rgba(255,255,255,0.04)',
+                      border: envWidgetSettings.draggable
+                        ? '1px solid rgba(0,255,102,0.5)'
+                        : '1px solid rgba(255,255,255,0.1)',
+                      color: envWidgetSettings.draggable ? '#00ff66' : 'rgba(255,255,255,0.5)',
+                      fontWeight: 'bold',
+                      fontSize: '12px',
+                      fontFamily: 'var(--mono)',
+                      letterSpacing: '1px',
+                      cursor: 'pointer',
+                      transition: 'all 0.25s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <span style={{ fontSize: '14px' }}>{envWidgetSettings.draggable ? '⊙' : '⊕'}</span>
+                    {envWidgetSettings.draggable ? 'DRAG MODE ON — Click to Lock' : 'Enable Drag & Drop'}
+                  </button>
+
+                  {/* Mini drag-map */}
+                  <div
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      height: '90px',
+                      background: 'rgba(0,255,102,0.04)',
+                      border: '1px solid rgba(0,255,102,0.2)',
+                      borderRadius: '10px',
+                      cursor: 'crosshair',
+                      overflow: 'hidden',
+                      userSelect: 'none',
+                      opacity: 1
+                    }}
+                    ref={envMapRef}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setIsDraggingEnvMap(true);
+                      const rect = envMapRef.current.getBoundingClientRect();
+                      const px = Math.round(((e.clientX - rect.left) / rect.width) * (window.innerWidth - 200));
+                      const py = Math.round(((e.clientY - rect.top) / rect.height) * (window.innerHeight - 200));
+                      setEnvPosAndSync({ x: Math.max(0, px), y: Math.max(0, py) });
+                    }}
+                    onMouseMove={(e) => {
+                      if (!isDraggingEnvMap) return;
+                      const rect = envMapRef.current.getBoundingClientRect();
+                      const px = Math.round(((e.clientX - rect.left) / rect.width) * (window.innerWidth - 200));
+                      const py = Math.round(((e.clientY - rect.top) / rect.height) * (window.innerHeight - 200));
+                      setEnvPosAndSync({ x: Math.max(0, px), y: Math.max(0, py) });
+                    }}
+                    onMouseUp={() => setIsDraggingEnvMap(false)}
+                    onMouseLeave={() => setIsDraggingEnvMap(false)}
+                  >
+                    {/* Grid lines */}
+                    <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,255,102,0.06) 0px, rgba(0,255,102,0.06) 1px, transparent 1px, transparent 18px), repeating-linear-gradient(90deg, rgba(0,255,102,0.06) 0px, rgba(0,255,102,0.06) 1px, transparent 1px, transparent 18px)', pointerEvents: 'none' }} />
+                    {/* Corner labels */}
+                    <span style={{ position: 'absolute', top: 3, left: 5, fontSize: '8px', color: 'rgba(0,255,102,0.35)', fontFamily: 'var(--mono)', pointerEvents: 'none' }}>0,0</span>
+                    <span style={{ position: 'absolute', bottom: 3, right: 5, fontSize: '8px', color: 'rgba(0,255,102,0.35)', fontFamily: 'var(--mono)', pointerEvents: 'none' }}>W,H</span>
+                    {/* Draggable dot */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: '50%',
+                        background: 'rgba(0,255,102,0.9)',
+                        boxShadow: '0 0 8px rgba(0,255,102,0.8)',
+                        border: '2px solid #fff',
+                        transform: 'translate(-50%, -50%)',
+                        left: `${Math.min(100, (envPos.x / (window.innerWidth - 200)) * 100)}%`,
+                        top: `${Math.min(100, (envPos.y / (window.innerHeight - 200)) * 100)}%`,
+                        pointerEvents: 'none',
+                        transition: isDraggingEnvMap ? 'none' : 'left 0.15s, top 0.15s'
+                      }}
+                    />
+                    {/* Crosshair lines */}
+                    <div style={{
+                      position: 'absolute',
+                      left: `${Math.min(100, (envPos.x / (window.innerWidth - 200)) * 100)}%`,
+                      top: 0, bottom: 0,
+                      width: '1px',
+                      background: 'rgba(0,255,102,0.25)',
+                      pointerEvents: 'none',
+                      transition: isDraggingEnvMap ? 'none' : 'left 0.15s'
+                    }} />
+                    <div style={{
+                      position: 'absolute',
+                      top: `${Math.min(100, (envPos.y / (window.innerHeight - 200)) * 100)}%`,
+                      left: 0, right: 0,
+                      height: '1px',
+                      background: 'rgba(0,255,102,0.25)',
+                      pointerEvents: 'none',
+                      transition: isDraggingEnvMap ? 'none' : 'top 0.15s'
+                    }} />
+                  </div>
+
+                  {/* X / Y inputs */}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                    {[['X', 'x', window.innerWidth - 200], ['Y', 'y', window.innerHeight - 200]].map(([label, axis, maxVal]) => (
+                      <div key={axis} style={{ flex: 1 }}>
+                        <div style={{ fontSize: '10px', color: 'rgba(0,255,102,0.6)', fontFamily: 'var(--mono)', marginBottom: '3px' }}>{label} PX</div>
+                        <input
+                          type="number"
+                          min={0}
+                          max={maxVal}
+                          value={envPos[axis]}
+                          onChange={(e) => {
+                            const val = Math.max(0, Math.min(maxVal, parseInt(e.target.value) || 0));
+                            setEnvPosAndSync({ ...envPos, [axis]: val });
+                          }}
+                          style={{
+                            width: '100%',
+                            background: 'rgba(0,255,102,0.05)',
+                            border: '1px solid rgba(0,255,102,0.2)',
+                            borderRadius: '6px',
+                            color: '#00ff66',
+                            padding: '5px 8px',
+                            fontSize: '12px',
+                            fontFamily: 'var(--mono)',
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Coordinate readout + reset */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
+                    <span style={{ fontSize: '10px', fontFamily: 'var(--mono)', color: 'rgba(0,255,102,0.5)' }}>
+                      [{envPos.x}, {envPos.y}] px
+                    </span>
+                    <button
+                      onClick={() => {
+                        const defaultPos = { x: 24, y: 110 };
+                        setEnvPosAndSync(defaultPos);
+                        showToast('Env position reset!');
+                      }}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        background: 'rgba(255, 51, 102, 0.1)',
+                        border: '1px solid rgba(255, 51, 102, 0.3)',
+                        color: '#ff5577',
+                        cursor: 'pointer',
+                        fontSize: '10px'
+                      }}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                {/* Widget Size */}
+                <div className="settings-section" style={{ borderBottom: 'none', paddingBottom: '0' }}>
+                  <label className="section-label">5. Widget Size</label>
+                  <div style={{ marginTop: '10px' }}>
+                    <input
+                      type="range"
+                      min={0.5}
+                      max={2}
+                      step={0.05}
+                      value={envWidgetSettings.scale ?? 1}
+                      onChange={(e) => updateEnvWidgetSetting('scale', parseFloat(e.target.value))}
+                      style={{ width: '100%', accentColor: '#00ff66', cursor: 'pointer' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                      <span style={{ fontSize: '9px', color: 'rgba(0,255,102,0.4)', fontFamily: 'var(--mono)' }}>0.5×</span>
+                      <span style={{ fontSize: '11px', color: '#00ff66', fontFamily: 'var(--mono)', fontWeight: 'bold' }}>
+                        {(envWidgetSettings.scale ?? 1).toFixed(2)}×
+                      </span>
+                      <span style={{ fontSize: '9px', color: 'rgba(0,255,102,0.4)', fontFamily: 'var(--mono)' }}>2×</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* COLUMN 8: HARDWARE STATE WIDGET CONFIGURATION (SYS-08) */}
+            <div className={`settings-column ${isConnSectionOpen ? 'open' : 'collapsed'}`}>
+              <button 
+                className="column-accordion-header"
+                onClick={() => setIsConnSectionOpen(!isConnSectionOpen)}
+              >
+                <div className="header-text-group">
+                  <span className="module-tag">SYS-08</span>
+                  <h4>Hardware HUD Config</h4>
+                </div>
+                <div className="header-status-indicator">
+                  <span className="status-label">{isConnSectionOpen ? 'ONLINE' : 'STANDBY'}</span>
+                  <span className={`status-dot ${isConnSectionOpen ? 'online' : 'standby'}`}></span>
+                  <span className="chevron-icon">{isConnSectionOpen ? '▼' : '▲'}</span>
+                </div>
+              </button>
+              
+              <div className="column-accordion-content">
+                {/* Title Text */}
+                <div className="settings-section">
+                  <label className="section-label" style={{ display: 'block', marginBottom: '8px' }}>1. Custom Title Text</label>
+                  <input
+                    type="text"
+                    value={connWidgetSettings.titleText}
+                    onChange={(e) => updateConnWidgetSetting('titleText', e.target.value)}
+                    placeholder="HARDWARE LINK STATE"
+                    style={{
+                      width: '100%',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      padding: '8px 12px',
+                      fontSize: '13px',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {/* Theme Color */}
+                <div className="settings-section">
+                  <label className="section-label">2. Widget Theme Color</label>
+                  <div className="custom-color-picker-container" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
+                    <input
+                      type="color"
+                      value={connWidgetSettings.colorTheme || statusSettings.colorTheme}
+                      onChange={(e) => updateConnWidgetSetting('colorTheme', e.target.value)}
+                      className="custom-color-input"
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'transparent',
+                        width: '40px',
+                        height: '40px',
+                        cursor: 'pointer',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        padding: '0'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', fontFamily: 'var(--mono)', color: 'var(--accent)', fontWeight: 'bold' }}>
+                      {(connWidgetSettings.colorTheme || statusSettings.colorTheme).toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Text Color */}
+                <div className="settings-section">
+                  <label className="section-label">3. Text Color</label>
+                  <div className="custom-color-picker-container" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
+                    <input
+                      type="color"
+                      value={connWidgetSettings.textColor || statusSettings.textColor}
+                      onChange={(e) => updateConnWidgetSetting('textColor', e.target.value)}
+                      className="custom-color-input"
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'transparent',
+                        width: '40px',
+                        height: '40px',
+                        cursor: 'pointer',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        padding: '0'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', fontFamily: 'var(--mono)', color: 'var(--accent)', fontWeight: 'bold' }}>
+                      {(connWidgetSettings.textColor || statusSettings.textColor).toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Drag toggle + Position Controls - Conn */}
+                <div className="settings-section">
+                  <label className="section-label">4. Drag & Position</label>
+
+                  {/* Drag toggle */}
+                  <button
+                    className={`btn-drag-toggle ${connWidgetSettings.draggable ? 'active' : ''}`}
+                    onClick={() => updateConnWidgetSetting('draggable', !connWidgetSettings.draggable)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      marginTop: '8px',
+                      marginBottom: '12px',
+                      borderRadius: '10px',
+                      background: connWidgetSettings.draggable
+                        ? 'rgba(0,180,255,0.18)'
+                        : 'rgba(255,255,255,0.04)',
+                      border: connWidgetSettings.draggable
+                        ? '1px solid rgba(0,180,255,0.5)'
+                        : '1px solid rgba(255,255,255,0.1)',
+                      color: connWidgetSettings.draggable ? '#00b4ff' : 'rgba(255,255,255,0.5)',
+                      fontWeight: 'bold',
+                      fontSize: '12px',
+                      fontFamily: 'var(--mono)',
+                      letterSpacing: '1px',
+                      cursor: 'pointer',
+                      transition: 'all 0.25s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <span style={{ fontSize: '14px' }}>{connWidgetSettings.draggable ? '⊙' : '⊕'}</span>
+                    {connWidgetSettings.draggable ? 'DRAG MODE ON — Click to Lock' : 'Enable Drag & Drop'}
+                  </button>
+
+                  {/* Mini drag-map */}
+                  <div
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      height: '90px',
+                      marginTop: '10px',
+                      background: 'rgba(0,180,255,0.04)',
+                      border: '1px solid rgba(0,180,255,0.2)',
+                      borderRadius: '10px',
+                      cursor: 'crosshair',
+                      overflow: 'hidden',
+                      userSelect: 'none'
+                    }}
+                    ref={connMapRef}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setIsDraggingConnMap(true);
+                      const rect = connMapRef.current.getBoundingClientRect();
+                      const px = Math.round(((e.clientX - rect.left) / rect.width) * (window.innerWidth - 200));
+                      const py = Math.round(((e.clientY - rect.top) / rect.height) * (window.innerHeight - 200));
+                      setConnPosAndSync({ x: Math.max(0, px), y: Math.max(0, py) });
+                    }}
+                    onMouseMove={(e) => {
+                      if (!isDraggingConnMap) return;
+                      const rect = connMapRef.current.getBoundingClientRect();
+                      const px = Math.round(((e.clientX - rect.left) / rect.width) * (window.innerWidth - 200));
+                      const py = Math.round(((e.clientY - rect.top) / rect.height) * (window.innerHeight - 200));
+                      setConnPosAndSync({ x: Math.max(0, px), y: Math.max(0, py) });
+                    }}
+                    onMouseUp={() => setIsDraggingConnMap(false)}
+                    onMouseLeave={() => setIsDraggingConnMap(false)}
+                  >
+                    {/* Grid */}
+                    <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(0deg, rgba(0,180,255,0.06) 0px, rgba(0,180,255,0.06) 1px, transparent 1px, transparent 18px), repeating-linear-gradient(90deg, rgba(0,180,255,0.06) 0px, rgba(0,180,255,0.06) 1px, transparent 1px, transparent 18px)', pointerEvents: 'none' }} />
+                    <span style={{ position: 'absolute', top: 3, left: 5, fontSize: '8px', color: 'rgba(0,180,255,0.35)', fontFamily: 'var(--mono)', pointerEvents: 'none' }}>0,0</span>
+                    <span style={{ position: 'absolute', bottom: 3, right: 5, fontSize: '8px', color: 'rgba(0,180,255,0.35)', fontFamily: 'var(--mono)', pointerEvents: 'none' }}>W,H</span>
+                    {/* Dot */}
+                    <div style={{
+                      position: 'absolute',
+                      width: '14px', height: '14px',
+                      borderRadius: '50%',
+                      background: 'rgba(0,180,255,0.9)',
+                      boxShadow: '0 0 8px rgba(0,180,255,0.8)',
+                      border: '2px solid #fff',
+                      transform: 'translate(-50%, -50%)',
+                      left: `${Math.min(100, (connPos.x / (window.innerWidth - 200)) * 100)}%`,
+                      top: `${Math.min(100, (connPos.y / (window.innerHeight - 200)) * 100)}%`,
+                      pointerEvents: 'none',
+                      transition: isDraggingConnMap ? 'none' : 'left 0.15s, top 0.15s'
+                    }} />
+                    {/* Crosshairs */}
+                    <div style={{
+                      position: 'absolute',
+                      left: `${Math.min(100, (connPos.x / (window.innerWidth - 200)) * 100)}%`,
+                      top: 0, bottom: 0, width: '1px',
+                      background: 'rgba(0,180,255,0.25)', pointerEvents: 'none',
+                      transition: isDraggingConnMap ? 'none' : 'left 0.15s'
+                    }} />
+                    <div style={{
+                      position: 'absolute',
+                      top: `${Math.min(100, (connPos.y / (window.innerHeight - 200)) * 100)}%`,
+                      left: 0, right: 0, height: '1px',
+                      background: 'rgba(0,180,255,0.25)', pointerEvents: 'none',
+                      transition: isDraggingConnMap ? 'none' : 'top 0.15s'
+                    }} />
+                  </div>
+
+                  {/* X / Y inputs */}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                    {[['X', 'x', window.innerWidth - 200], ['Y', 'y', window.innerHeight - 200]].map(([label, axis, maxVal]) => (
+                      <div key={axis} style={{ flex: 1 }}>
+                        <div style={{ fontSize: '10px', color: 'rgba(0,180,255,0.6)', fontFamily: 'var(--mono)', marginBottom: '3px' }}>{label} PX</div>
+                        <input
+                          type="number"
+                          min={0}
+                          max={maxVal}
+                          value={connPos[axis]}
+                          onChange={(e) => {
+                            const val = Math.max(0, Math.min(maxVal, parseInt(e.target.value) || 0));
+                            setConnPosAndSync({ ...connPos, [axis]: val });
+                          }}
+                          style={{
+                            width: '100%',
+                            background: 'rgba(0,180,255,0.05)',
+                            border: '1px solid rgba(0,180,255,0.2)',
+                            borderRadius: '6px',
+                            color: '#00b4ff',
+                            padding: '5px 8px',
+                            fontSize: '12px',
+                            fontFamily: 'var(--mono)',
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Readout + reset */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
+                    <span style={{ fontSize: '10px', fontFamily: 'var(--mono)', color: 'rgba(0,180,255,0.5)' }}>
+                      [{connPos.x}, {connPos.y}] px
+                    </span>
+                    <button
+                      onClick={() => {
+                        const defaultPos = { x: 24, y: 395 };
+                        setConnPosAndSync(defaultPos);
+                        showToast('Hardware position reset!');
+                      }}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        background: 'rgba(255, 51, 102, 0.1)',
+                        border: '1px solid rgba(255, 51, 102, 0.3)',
+                        color: '#ff5577',
+                        cursor: 'pointer',
+                        fontSize: '10px'
+                      }}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                {/* Widget Size */}
+                <div className="settings-section" style={{ borderBottom: 'none', paddingBottom: '0' }}>
+                  <label className="section-label">5. Widget Size</label>
+                  <div style={{ marginTop: '10px' }}>
+                    <input
+                      type="range"
+                      min={0.5}
+                      max={2}
+                      step={0.05}
+                      value={connWidgetSettings.scale ?? 1}
+                      onChange={(e) => updateConnWidgetSetting('scale', parseFloat(e.target.value))}
+                      style={{ width: '100%', accentColor: '#00b4ff', cursor: 'pointer' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                      <span style={{ fontSize: '9px', color: 'rgba(0,180,255,0.4)', fontFamily: 'var(--mono)' }}>0.5×</span>
+                      <span style={{ fontSize: '11px', color: '#00b4ff', fontFamily: 'var(--mono)', fontWeight: 'bold' }}>
+                        {(connWidgetSettings.scale ?? 1).toFixed(2)}×
+                      </span>
+                      <span style={{ fontSize: '9px', color: 'rgba(0,180,255,0.4)', fontFamily: 'var(--mono)' }}>2×</span>
+                    </div>
                   </div>
                 </div>
               </div>

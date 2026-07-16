@@ -135,9 +135,124 @@ async def tts_endpoint(request: TTSRequest):
             detail=f"TTS synthesis failed: {str(e)}"
         )
 
+@app.get("/api/system_info")
+async def system_info_endpoint():
+    import platform
+    import subprocess
+    
+    # 1. Location lookup via IP
+    location_data = {
+        "city": "Bengaluru",
+        "country": "India",
+        "countryCode": "IN",
+        "lat": 12.9716,
+        "lon": 77.5946
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.get("http://ip-api.com/json/", timeout=1.5)
+            if res.status_code == 200:
+                data = res.json()
+                if data.get("status") == "success":
+                    location_data = {
+                        "city": data.get("city", "Delhi"),
+                        "country": data.get("country", "India"),
+                        "countryCode": data.get("countryCode", "IN"),
+                        "lat": data.get("lat", 28.6139),
+                        "lon": data.get("lon", 77.2090)
+                    }
+    except Exception:
+        pass
+
+    # 2. Battery status
+    battery = psutil.sensors_battery()
+    battery_data = {
+        "percent": battery.percent if battery else 100,
+        "power_plugged": battery.power_plugged if battery else True,
+        "secsleft": battery.secsleft if battery else -1
+    }
+
+    # 3. WiFi Status
+    wifi_connected = False
+    wifi_ssid = "Not Connected"
+    current_os = platform.system().lower()
+    
+    if "windows" in current_os:
+        try:
+            out = subprocess.check_output("netsh wlan show interfaces", shell=True, text=True, errors="ignore")
+            ssid_match = re.search(r"^\s+SSID\s+:\s+(.+)$", out, re.MULTILINE)
+            state_match = re.search(r"^\s+State\s+:\s+(connected|connected\s.*)$", out, re.MULTILINE)
+            if state_match:
+                wifi_connected = True
+                wifi_ssid = ssid_match.group(1).strip() if ssid_match else "Local WiFi Connection"
+        except Exception:
+            pass
+    elif "darwin" in current_os:
+        try:
+            out = subprocess.check_output(["/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport", "-I"], text=True, errors="ignore")
+            ssid_match = re.search(r" SSID: (.+)", out)
+            if ssid_match:
+                wifi_connected = True
+                wifi_ssid = ssid_match.group(1).strip()
+        except Exception:
+            pass
+    else: # Linux
+        try:
+            out = subprocess.check_output("iwgetid -r", shell=True, text=True, errors="ignore").strip()
+            if out:
+                wifi_connected = True
+                wifi_ssid = out
+        except Exception:
+            pass
+
+    # 4. Bluetooth status
+    bluetooth_on = False
+    if "windows" in current_os:
+        try:
+            for service in psutil.win_service_iter():
+                if service.name().lower() == "bthserv":
+                    if service.status() == "running":
+                        bluetooth_on = True
+                    break
+        except Exception:
+            pass
+    elif "darwin" in current_os:
+        try:
+            out = subprocess.check_output(["defaults", "read", "/Library/Preferences/com.apple.Bluetooth", "ControllerPowerState"], text=True, errors="ignore").strip()
+            if out == "1":
+                bluetooth_on = True
+        except Exception:
+            pass
+    else:
+        try:
+            out = subprocess.check_output("systemctl is-active bluetooth", shell=True, text=True, errors="ignore").strip()
+            if out == "active":
+                bluetooth_on = True
+        except Exception:
+            pass
+
+    return {
+        "location": location_data,
+        "battery": battery_data,
+        "network": {
+            "wifi": {
+                "connected": wifi_connected,
+                "ssid": wifi_ssid
+            },
+            "bluetooth": {
+                "enabled": bluetooth_on
+            }
+        },
+        "time": {
+            "timestamp": time.time(),
+            "formatted": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+    }
+
 @app.get("/health")
 def health_endpoint():
     return {"status": "healthy"}
+
 
 @app.get("/ready")
 async def ready_endpoint():

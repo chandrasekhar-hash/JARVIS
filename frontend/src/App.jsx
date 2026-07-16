@@ -3,6 +3,7 @@ import Navbar from './component/Navbar';
 import Bob from './component/bob';
 import Terminal from './component/Terminal';
 import Status from './component/Status';
+import Widgets from './component/Widgets';
 import { AssistantConfigProvider } from './context/AssistantConfigContext';
 import './App.css';
 
@@ -125,6 +126,7 @@ function App() {
         <div className="cosmic-glow cosmic-glow-2"></div>
 
         <Status />
+        <Widgets />
 
         <Navbar 
           blobColor={blobColor}
