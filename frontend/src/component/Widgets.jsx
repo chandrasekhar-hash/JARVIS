@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAssistantConfig } from '../context/AssistantConfigContext';
+import { invoke } from '@tauri-apps/api/core';
 import './Widgets.css';
 
 // ── Reverse geocode lat/lon → city + country using Nominatim ─────────────────
@@ -130,16 +131,24 @@ export default function Widgets() {
   // ── Fetch system info (IP-based fallback location + hardware) ────────────
   useEffect(() => {
     const fetchSystemInfo = async () => {
+      const isTauri = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__;
       try {
         const tStart = Date.now();
-        const res = await fetch('http://localhost:8000/api/system_info');
-        if (res.ok) {
-          const data = await res.json();
+        let data = null;
+        if (isTauri) {
+          data = await invoke('get_system_info');
+        } else {
+          const res = await fetch('http://localhost:8000/api/system_info');
+          if (res.ok) {
+            data = await res.json();
+          }
+        }
+        if (data) {
           setSystemData(data);
           setPing(Date.now() - tStart);
         }
       } catch (err) {
-        console.error('Failed to fetch system info from backend:', err);
+        console.warn('Transient backend system_info query log (backend may still be booting):', err);
       }
     };
     fetchSystemInfo();

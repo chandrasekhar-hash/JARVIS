@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAssistantConfig } from '../context/AssistantConfigContext';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import './Terminal.css';
 import { formatTranscript } from '../services/transcriptFormatter';
 
@@ -134,6 +136,80 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     };
   }, []);
 
+  // Listen to Tauri events (Runtime State changes and SSE streaming tokens)
+  useEffect(() => {
+    if (!isTauri) return;
+
+    let unlistenState = null;
+    let unlistenToken = null;
+
+    const setupListeners = async () => {
+      try {
+        unlistenState = await listen('runtime-state-change', (event) => {
+          const { state, previous } = event.payload;
+          console.log(`[Tauri Runtime] State changed from ${previous} to ${state}`);
+          
+          switch (state) {
+            case 'BOOT':
+            case 'LAUNCHINGBACKEND':
+            case 'WAITINGFORHEALTH':
+              updateStatus('processing');
+              setLlmResponse('System Initializing: Spawning core backend services...');
+              break;
+            case 'READY':
+              updateStatus('standby');
+              setLlmResponse('');
+              break;
+            case 'RESTARTING':
+              updateStatus('paused');
+              setLlmResponse('System Alert: Backend process died. Reconnecting...');
+              break;
+            case 'FAILED':
+              updateStatus('error');
+              setLlmResponse('CRITICAL ERROR: Backend failed to start after maximum retry attempts.');
+              break;
+            case 'SHUTDOWN':
+              updateStatus('standby');
+              break;
+            default:
+              break;
+          }
+        });
+
+        unlistenToken = await listen('chat-token', (event) => {
+          const json = event.payload;
+          if (json.type === 'text') {
+            const token = json.content || "";
+            if (token) {
+              accumulatedTextRef.current += token;
+              setLlmResponse(accumulatedTextRef.current);
+              updateStatus('responding');
+              updateResponseState('visible');
+            }
+          } else if (json.type === 'audio_url') {
+            const audioUrl = json.url;
+            const sentenceText = json.text || "";
+            if (audioUrl) {
+              receivedAudioUrlRef.current = true;
+              playAssistantAudio(audioUrl, sentenceText);
+            }
+          } else if (json.type === 'error') {
+            console.error("[Tauri Backend Error]", json.content);
+          }
+        });
+      } catch (err) {
+        console.error("Failed to establish Tauri event listeners:", err);
+      }
+    };
+
+    setupListeners();
+
+    return () => {
+      if (unlistenState) unlistenState();
+      if (unlistenToken) unlistenToken();
+    };
+  }, []);
+
 
   const [listeningLang, setListeningLang] = useState(() => {
     return localStorage.getItem('jarvis-listening-lang') || 'Auto Detect';
@@ -227,6 +303,9 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
   const wakeWordDetectedRef = useRef(false);
   const retryCountRef         = useRef(0);
   const hasTransientErrorRef  = useRef(false);
+  const accumulatedTextRef    = useRef('');
+  const receivedAudioUrlRef   = useRef(false);
+  const isTauri = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__;
 
   const updateStatus = (newStatus) => {
     statusRef.current = newStatus;
@@ -664,6 +743,64 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     const controller = new AbortController();
     activeRequestControllerRef.current = controller;
 
+    if (isTauri) {
+      console.log("DEBUG_LOG: [Frontend] Diverting fetchGroqResponse request to Tauri IPC...");
+      try {
+        const langMap = {
+          'Hinglish': 'hinglish',
+          'English': 'english',
+          'हिन्दी': 'hindi',
+          'ଓଡ଼ିଆ': 'odia',
+          'తెలుగు': 'telugu',
+          'தமிழ்': 'tamil',
+          'ಕನ್ನಡ': 'kannada',
+          'മലയാളം': 'malayalam',
+          'বাংলা': 'bengali',
+          'ગુજરાતી': 'gujarati',
+          'ਪੰਜਾਬੀ': 'punjabi',
+          'मराठी': 'marathi'
+        };
+        const selectedLangKey = langMap[displayLang] || 'english';
+        const ttsLangKey = (voiceLanguage && voiceLanguage !== 'auto') ? voiceLanguage : selectedLangKey;
+
+        setLlmResponse('');
+        updateResponseState('visible');
+        accumulatedTextRef.current = "";
+        receivedAudioUrlRef.current = false;
+
+        await invoke("send_chat_message", {
+          payload: {
+            message: trimmedQuery,
+            voice: voiceGender,
+            language: selectedLangKey,
+            tts_language: ttsLangKey,
+            assistant_name: assistantName,
+            creator: creator
+          }
+        });
+
+        console.log("DEBUG_LOG: [Frontend] Tauri IPC chat message call completed.");
+        if (!receivedAudioUrlRef.current) {
+          updateStatus('active');
+          startActiveTimeout();
+          scheduleAutoClear();
+        }
+      } catch (err) {
+        console.error("[Tauri IPC Chat Error]", err);
+        updateStatus('responding');
+        const errReply = `Error connecting to ${assistantName} core.`;
+        typewrite(errReply);
+        setTimeout(() => {
+          updateStatus('active');
+          startActiveTimeout();
+          scheduleAutoClear();
+        }, 3000);
+      } finally {
+        isRequestActiveRef.current = false;
+      }
+      return;
+    }
+
     try {
       const langMap = {
         'Hinglish': 'hinglish',
@@ -882,6 +1019,25 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     setLlmResponse(responseText);
 
     try {
+      if (isTauri) {
+        console.log("DEBUG_LOG: [Frontend] Diverting local wake greeting TTS to Tauri IPC...");
+        const data = await invoke("get_tts_audio", {
+          payload: {
+            text: responseText,
+            voice: voiceGender,
+            language: voiceLanguage && voiceLanguage !== 'auto' ? voiceLanguage : 'english'
+          }
+        });
+        if (data && data.url) {
+          playAssistantAudio(data.url, responseText);
+        } else {
+          updateStatus('active');
+          startActiveTimeout();
+          scheduleAutoClear();
+        }
+        return;
+      }
+
       const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
       const response = await fetch(`${baseUrl}/api/tts`, {
         method: "POST",
