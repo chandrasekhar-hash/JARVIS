@@ -125,6 +125,38 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
   const [noSupport, setNoSupport]               = useState(false);
   const [isOff, setIsOff]                       = useState(false);
 
+  const handleBridgeRequest = async (request) => {
+    const { id, op, args } = request;
+    console.log(`[Bridge] Received request: id=${id}, op=${op}`, args);
+    const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const callbackUrl = `${baseUrl}/api/bridge/callback`;
+    try {
+      let result = null;
+      if (isTauri) {
+        result = await invoke("dispatch_desktop_operation", { op, args });
+      } else {
+        throw new Error("Platform operations are only supported when running inside Tauri.");
+      }
+      await fetch(callbackUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, data: result })
+      });
+      console.log(`[Bridge] Request ${id} successfully resolved with data:`, result);
+    } catch (err) {
+      console.error(`[Bridge] Error handling request ${id}:`, err);
+      try {
+        await fetch(callbackUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, error: err.message || String(err) })
+        });
+      } catch (e) {
+        console.error("[Bridge] Failed to post error callback:", e);
+      }
+    }
+  };
+
   // Cleanup all timers on component unmount
   useEffect(() => {
     return () => {
@@ -193,6 +225,8 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
               receivedAudioUrlRef.current = true;
               playAssistantAudio(audioUrl, sentenceText);
             }
+          } else if (json.type === 'bridge_request') {
+            handleBridgeRequest(json);
           } else if (json.type === 'error') {
             console.error("[Tauri Backend Error]", json.content);
           }
@@ -896,6 +930,8 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
                   receivedAudioUrl = true;
                   playAssistantAudio(audioUrl, sentenceText);
                 }
+              } else if (json.type === 'bridge_request') {
+                handleBridgeRequest(json);
               } else if (json.type === 'error') {
                 console.error("[Backend TTS Error]", json.content);
               }
@@ -929,6 +965,8 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
               receivedAudioUrl = true;
               playAssistantAudio(audioUrl, sentenceText);
             }
+          } else if (json.type === 'bridge_request') {
+            handleBridgeRequest(json);
           }
         } catch (_) {}
       }

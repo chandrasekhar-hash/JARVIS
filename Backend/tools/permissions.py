@@ -23,10 +23,10 @@ class PermissionManager:
         safety_level = self.permission_registry.get(tool_name, "restricted")
         confirmed = args.get("confirmed", False)
         
-        if safety_level == "safe":
+        if safety_level in ("safe", "sensitive"):
             return "authorized"
             
-        elif safety_level == "confirmation_required":
+        elif safety_level in ("confirmation_required", "destructive"):
             log_safety_confirmation(tool_name, confirmed)
             if confirmed:
                 return "authorized"

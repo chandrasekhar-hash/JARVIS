@@ -19,6 +19,7 @@ from tts_engines import tts_manager
 from tools.router import handle_agent_chat
 from tools.startup import verify_startup
 from tools.telemetry import task_watchdog, telemetry_manager, log_structured, backend_log, request_id_var
+from tools.bridge import event_queue_var, bridge_manager
 
 app = FastAPI(title="J.A.R.V.I.S. Core Backend API")
 
@@ -309,6 +310,21 @@ def metrics_endpoint():
     summary["active_tasks"] = active_list
     return summary
 
+from typing import Any, Optional
+
+class CallbackRequest(BaseModel):
+    id: str
+    data: Any = None
+    error: Optional[str] = None
+
+@app.post("/api/bridge/callback")
+async def bridge_callback_endpoint(req: CallbackRequest):
+    resolved = await bridge_manager.resolve_request(req.id, {"data": req.data, "error": req.error})
+    if resolved:
+        return {"status": "success"}
+    else:
+        raise HTTPException(status_code=404, detail="Bridge request expired or not found")
+
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     req_id = str(uuid.uuid4())
@@ -317,6 +333,7 @@ async def chat_endpoint(request: ChatRequest):
     telemetry_manager.increment_counter("active_conversations")
 
     event_queue = asyncio.Queue()
+    event_queue_var.set(event_queue)
     prod_task = None
 
     async def event_generator():

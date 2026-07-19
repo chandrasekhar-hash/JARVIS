@@ -5,3 +5,4 @@ from tools.classifier import classify_intent
 import tools.browser
 import tools.apps
 import tools.filesystem
+import tools.desktop
