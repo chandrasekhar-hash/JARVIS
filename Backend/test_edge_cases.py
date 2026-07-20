@@ -91,9 +91,17 @@ async def test_history_summarization():
     original_size = len(tools.router.conversation_history)
     print(f"Original conversation history size: {original_size} messages.")
     
-    from config import GROQ_API_KEY
-    if GROQ_API_KEY:
-        print("Requesting live Groq auto-summarization on the oldest messages...")
+    from config import ACTIVE_PROVIDER, GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, CEREBRAS_API_KEY
+    if ACTIVE_PROVIDER == "gemini":
+        active_key = GEMINI_API_KEY
+    elif ACTIVE_PROVIDER == "openrouter":
+        active_key = OPENROUTER_API_KEY
+    elif ACTIVE_PROVIDER == "cerebras":
+        active_key = CEREBRAS_API_KEY
+    else:
+        active_key = GROQ_API_KEY
+    if active_key:
+        print(f"Requesting live {ACTIVE_PROVIDER.upper()} auto-summarization on the oldest messages...")
         await auto_summarize_history_if_needed()
         new_size = len(tools.router.conversation_history)
         print(f"History size after compression check: {new_size} messages.")
@@ -106,7 +114,7 @@ async def test_history_summarization():
         else:
             print("FAIL: History size remained unchanged.")
     else:
-        print("Skipping live API summarization tests since GROQ_API_KEY is missing.")
+        print(f"Skipping live API summarization tests since API key for active provider '{ACTIVE_PROVIDER}' is missing.")
 
 async def main():
     await test_path_traversal()

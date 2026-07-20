@@ -1,0 +1,33 @@
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+dist/
+
+# Python caching
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+
+# Local configurations & backups
+.env
+.env.local
+*.env.bak
+*.bak
+app_cache.json
+
+# Dependencies & Build Outputs
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/src-tauri/target/
+
+# Logs
+logs/
+*.log
+Backend/logs/
+Backend/server_val.log
+Backend/server.log

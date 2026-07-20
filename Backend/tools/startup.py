@@ -18,10 +18,27 @@ def verify_startup():
         raise RuntimeError(err)
         
     # 2. Environment variables verification
-    groq_key = os.getenv("GROQ_API_KEY") or os.getenv("VITE_GROQ_API_KEY")
-    if not groq_key:
-        err = "Startup diagnostic failed: Required environment variable 'GROQ_API_KEY' is missing."
-        raise RuntimeError(err)
+    from config import ACTIVE_PROVIDER
+    if ACTIVE_PROVIDER == "gemini":
+        gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY")
+        if not gemini_key:
+            err = "Startup diagnostic failed: Required environment variable 'GEMINI_API_KEY' is missing."
+            raise RuntimeError(err)
+    elif ACTIVE_PROVIDER == "openrouter":
+        or_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("VITE_OPENROUTER_API_KEY")
+        if not or_key:
+            err = "Startup diagnostic failed: Required environment variable 'OPENROUTER_API_KEY' is missing."
+            raise RuntimeError(err)
+    elif ACTIVE_PROVIDER == "cerebras":
+        cer_key = os.getenv("CEREBRAS_API_KEY") or os.getenv("VITE_CEREBRAS_API_KEY")
+        if not cer_key:
+            err = "Startup diagnostic failed: Required environment variable 'CEREBRAS_API_KEY' is missing."
+            raise RuntimeError(err)
+    else:
+        groq_key = os.getenv("GROQ_API_KEY") or os.getenv("VITE_GROQ_API_KEY")
+        if not groq_key:
+            err = "Startup diagnostic failed: Required environment variable 'GROQ_API_KEY' is missing."
+            raise RuntimeError(err)
         
     # 3. Write permission tests in required directories
     required_dirs = ["logs", "tts_engines"]

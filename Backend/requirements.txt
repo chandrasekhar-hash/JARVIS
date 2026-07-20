@@ -3,3 +3,6 @@ uvicorn
 edge-tts
 httpx
 python-dotenv
+google-generativeai
+psutil
+

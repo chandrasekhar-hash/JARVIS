@@ -14,7 +14,7 @@ import signal
 import atexit
 import os
 
-from config import GROQ_API_KEY, TTS_ENGINE
+from config import TTS_ENGINE
 from tts_engines import tts_manager
 from tools.router import handle_agent_chat
 from tools.startup import verify_startup
@@ -261,8 +261,19 @@ async def ready_endpoint():
     is_ready = True
     
     # 1. Config Check
-    has_key = bool(os.getenv("GROQ_API_KEY") or os.getenv("VITE_GROQ_API_KEY"))
-    details["configuration"] = "valid" if has_key else "missing_key"
+    from config import ACTIVE_PROVIDER
+    if ACTIVE_PROVIDER == "gemini":
+        has_key = bool(os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY"))
+        details["configuration"] = "valid" if has_key else "missing_gemini_key"
+    elif ACTIVE_PROVIDER == "openrouter":
+        has_key = bool(os.getenv("OPENROUTER_API_KEY") or os.getenv("VITE_OPENROUTER_API_KEY"))
+        details["configuration"] = "valid" if has_key else "missing_openrouter_key"
+    elif ACTIVE_PROVIDER == "cerebras":
+        has_key = bool(os.getenv("CEREBRAS_API_KEY") or os.getenv("VITE_CEREBRAS_API_KEY"))
+        details["configuration"] = "valid" if has_key else "missing_cerebras_key"
+    else:
+        has_key = bool(os.getenv("GROQ_API_KEY") or os.getenv("VITE_GROQ_API_KEY"))
+        details["configuration"] = "valid" if has_key else "missing_groq_key"
     if not has_key:
         is_ready = False
         
@@ -277,14 +288,39 @@ async def ready_endpoint():
     desktop_exists = os.path.exists(os.path.join(os.path.expanduser("~"), "Desktop"))
     details["filesystem"] = "accessible" if desktop_exists else "restricted"
     
-    # 4. Groq Connection Check
-    try:
-        async with httpx.AsyncClient() as client:
-            res = await client.get("https://api.groq.com", timeout=3.0)
-            details["groq_connectivity"] = "connected"
-    except Exception:
-        details["groq_connectivity"] = "unreachable"
-        is_ready = False
+    # 4. Connection Check
+    if ACTIVE_PROVIDER == "gemini":
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.get("https://generativelanguage.googleapis.com", timeout=3.0)
+                details["gemini_connectivity"] = "connected"
+        except Exception:
+            details["gemini_connectivity"] = "unreachable"
+            is_ready = False
+    elif ACTIVE_PROVIDER == "openrouter":
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.get("https://openrouter.ai/api/v1/models", timeout=3.0)
+                details["openrouter_connectivity"] = "connected"
+        except Exception:
+            details["openrouter_connectivity"] = "unreachable"
+            is_ready = False
+    elif ACTIVE_PROVIDER == "cerebras":
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.get("https://api.cerebras.ai/v1/models", timeout=3.0, headers={"Authorization": f"Bearer {os.getenv('CEREBRAS_API_KEY')}"})
+                details["cerebras_connectivity"] = "connected"
+        except Exception:
+            details["cerebras_connectivity"] = "unreachable"
+            is_ready = False
+    else:
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.get("https://api.groq.com", timeout=3.0)
+                details["groq_connectivity"] = "connected"
+        except Exception:
+            details["groq_connectivity"] = "unreachable"
+            is_ready = False
         
     # 5. TTS Check
     try:
@@ -375,21 +411,6 @@ async def chat_endpoint(request: ChatRequest):
         f"If asked about your origin, state clearly and calmly that you were created by {request.creator}."
     )
 
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": "llama-3.1-8b-instant",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": request.message}
-        ],
-        "temperature": 0.6,
-        "max_tokens": 200,
-        "stream": True
-    }
 
     async def producer_task():
         sentence_buffer = ""

@@ -5,7 +5,7 @@ import time
 from typing import AsyncGenerator
 from tools.registry import registry
 from tools.classifier import classify_intent
-from config import GROQ_API_KEY
+from ai.providers.router import ai_router
 from tools.telemetry import telemetry_manager, log_structured, backend_log
 
 # In-memory conversation history
@@ -53,40 +53,29 @@ async def auto_summarize_history_if_needed():
         "Describe actions performed and active context in exactly 1-2 sentences."
     )
     
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [
-            {"role": "system", "content": summary_prompt},
-            {"role": "user", "content": json.dumps(to_summarize)}
-        ],
-        "temperature": 0.3,
-        "max_tokens": 150
-    }
-    
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=15.0
-            )
-            if response.status_code == 200:
-                summary = response.json()["choices"][0]["message"]["content"].strip()
-                conversation_history = [
-                    {"role": "system", "content": f"Summary of earlier conversation: {summary}"}
-                ] + to_keep
-                print(f"DEBUG_LOG: [Router] History summarized successfully: '{summary}'")
-            else:
-                # Fallback: slide history list
-                conversation_history = conversation_history[6:]
+        res_data = await ai_router.chat_completion(
+            messages=[
+                {"role": "system", "content": summary_prompt},
+                {"role": "user", "content": json.dumps(to_summarize)}
+            ],
+            temperature=0.3,
+            max_tokens=150
+        )
+        summary = res_data.content.strip() if res_data.content else ""
+        conversation_history = [
+            {"role": "system", "content": f"Summary of earlier conversation: {summary}"}
+        ] + to_keep
+        # Safely encode/decode to avoid print UnicodeEncodeErrors on Windows terminals
+        import sys
+        stdout_enc = getattr(sys.stdout, "encoding", "utf-8") or "utf-8"
+        safe_summary = summary.encode(stdout_enc, errors="replace").decode(stdout_enc)
+        print(f"DEBUG_LOG: [Router] History summarized successfully: '{safe_summary}'")
     except Exception as e:
-        print(f"DEBUG_LOG: [Router] Failed to summarize history: {str(e)}")
+        import sys
+        stdout_enc = getattr(sys.stdout, "encoding", "utf-8") or "utf-8"
+        safe_err = str(e).encode(stdout_enc, errors="replace").decode(stdout_enc)
+        print(f"DEBUG_LOG: [Router] Failed to summarize history: {safe_err}")
         conversation_history = conversation_history[6:]
 
 async def handle_agent_chat(
@@ -154,160 +143,152 @@ async def handle_agent_chat(
         f"2. Safe read-only or navigational actions can execute immediately."
     )
 
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
     tools = registry.get_tool_schemas()
     recent_history = conversation_history[-10:]
     current_messages = [{"role": "system", "content": system_prompt}] + recent_history
 
-    # First call to check for tool calls (non-streaming)
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": current_messages,
-        "temperature": 0.3,
-        "max_tokens": 400
-    }
-    if tools:
-        payload["tools"] = tools
-        payload["tool_choice"] = "auto"
-
-    async with httpx.AsyncClient() as client:
-        try:
-            t_start = time.time()
-            response = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            elapsed = time.time() - t_start
-            telemetry_manager.record_latency("llm_latency", elapsed)
-            telemetry_manager.increment_counter("llm_requests")
-            if response.status_code != 200:
-                err_msg = f"Groq API error: Status {response.status_code}. Details: {response.text}"
-                yield err_msg
-                return
-
-            res_data = response.json()
-            choice = res_data["choices"][0]
-            message_data = choice["message"]
-            tool_calls = message_data.get("tool_calls")
-
-            iteration = 0
-            MAX_TOOL_ITERATIONS = 5
-
-            # Multi-turn tool execution loop
-            while tool_calls and iteration < MAX_TOOL_ITERATIONS:
-                iteration += 1
-                print(f"DEBUG_LOG: [Router] Agent loop iteration {iteration}/{MAX_TOOL_ITERATIONS}")
-                
-                # 1. Deduplicate identical tool calls to prevent double execution
-                seen_calls = set()
-                unique_tool_calls = []
-                for tc in tool_calls:
-                    t_name = tc["function"]["name"]
-                    t_args_str = tc["function"]["arguments"]
-                    try:
-                        t_args_dict = json.loads(t_args_str)
-                        normalized = json.dumps(t_args_dict, sort_keys=True)
-                    except Exception:
-                        normalized = t_args_str
-                        
-                    key = (t_name, normalized)
-                    if key not in seen_calls:
-                        seen_calls.add(key)
-                        unique_tool_calls.append(tc)
-                    else:
-                        print(f"DEBUG_LOG: [Router] Duplicate tool call for '{t_name}' deduplicated.")
-                
-                assistant_tool_msg = {
-                    "role": "assistant",
-                    "tool_calls": unique_tool_calls
-                }
-                conversation_history.append(assistant_tool_msg)
-                
-                # 2. Execute unique tools sequentially
-                for tool_call in unique_tool_calls:
-                    tc_id = tool_call["id"]
-                    t_name = tool_call["function"]["name"]
-                    t_args = json.loads(tool_call["function"]["arguments"])
-                    
-                    try:
-                        # Execute (with locks and timeouts inside registry.execute)
-                        print(f"DEBUG_LOG: [Router/LLM] Dispatching tool_name={t_name!r} | t_args={t_args}")
-                        tool_result = await registry.execute(t_name, **t_args)
-                        update_active_state(t_name, t_args)
-                    except Exception as e:
-                        tool_result = f"Error executing tool {t_name}: {str(e)}"
-                        
-                    tool_response_msg = {
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "name": t_name,
-                        "content": str(tool_result)
+    try:
+        res_data = await ai_router.chat_completion(
+            messages=current_messages,
+            tools=tools,
+            temperature=0.3,
+            max_tokens=400
+        )
+        
+        tool_calls = None
+        if res_data.tool_calls:
+            tool_calls = [
+                {
+                    "id": tc.id,
+                    "type": tc.type,
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments
                     }
-                    conversation_history.append(tool_response_msg)
-                
-                # 3. Call LLM again to determine next step
-                recent_history = conversation_history[-10:]
-                current_messages = [{"role": "system", "content": system_prompt}] + recent_history
-                
-                is_last_iter = (iteration == MAX_TOOL_ITERATIONS)
-                
-                payload_next = {
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": current_messages,
-                    "temperature": 0.3,
-                    "max_tokens": 400
                 }
-                if tools and not is_last_iter:
-                    payload_next["tools"] = tools
-                    payload_next["tool_choice"] = "auto"
-                    
-                t_start = time.time()
-                response = await client.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers=headers,
-                    json=payload_next,
-                    timeout=30.0
-                )
-                elapsed = time.time() - t_start
-                telemetry_manager.record_latency("llm_latency", elapsed)
-                telemetry_manager.increment_counter("llm_requests")
-                if response.status_code != 200:
-                    yield f"Error in agent iteration {iteration}: Status {response.status_code}"
-                    return
-                    
-                res_data = response.json()
-                choice = res_data["choices"][0]
-                message_data = choice["message"]
-                tool_calls = message_data.get("tool_calls")
-                
-                if not tool_calls or is_last_iter:
-                    # Final response text achieved
-                    content = message_data.get("content", "")
-                    conversation_history.append({"role": "assistant", "content": content})
-                    
-                    # Stream response text
-                    for i in range(0, len(content), 5):
-                        yield content[i:i+5]
-                        await asyncio.sleep(0.01)
-                    break
+                for tc in res_data.tool_calls
+            ]
             
-            # If no tool calls in initial response, stream content directly
-            if iteration == 0:
-                content = message_data.get("content", "")
+        message_data = {
+            "role": "assistant",
+            "content": res_data.content,
+            "tool_calls": tool_calls
+        }
+
+        iteration = 0
+        MAX_TOOL_ITERATIONS = 5
+
+        # Multi-turn tool execution loop
+        while tool_calls and iteration < MAX_TOOL_ITERATIONS:
+            iteration += 1
+            print(f"DEBUG_LOG: [Router] Agent loop iteration {iteration}/{MAX_TOOL_ITERATIONS}")
+            
+            # 1. Deduplicate identical tool calls to prevent double execution
+            seen_calls = set()
+            unique_tool_calls = []
+            for tc in tool_calls:
+                t_name = tc["function"]["name"]
+                t_args_str = tc["function"]["arguments"]
+                try:
+                    t_args_dict = json.loads(t_args_str)
+                    normalized = json.dumps(t_args_dict, sort_keys=True)
+                except Exception:
+                    normalized = t_args_str
+                    
+                key = (t_name, normalized)
+                if key not in seen_calls:
+                    seen_calls.add(key)
+                    unique_tool_calls.append(tc)
+                else:
+                    print(f"DEBUG_LOG: [Router] Duplicate tool call for '{t_name}' deduplicated.")
+            
+            assistant_tool_msg = {
+                "role": "assistant",
+                "tool_calls": unique_tool_calls
+            }
+            conversation_history.append(assistant_tool_msg)
+            
+            # 2. Execute unique tools sequentially
+            for tool_call in unique_tool_calls:
+                tc_id = tool_call["id"]
+                t_name = tool_call["function"]["name"]
+                t_args = json.loads(tool_call["function"]["arguments"])
+                
+                try:
+                    # Execute (with locks and timeouts inside registry.execute)
+                    print(f"DEBUG_LOG: [Router/LLM] Dispatching tool_name={t_name!r} | t_args={t_args}")
+                    tool_result = await registry.execute(t_name, **t_args)
+                    update_active_state(t_name, t_args)
+                except Exception as e:
+                    tool_result = f"Error executing tool {t_name}: {str(e)}"
+                    
+                tool_response_msg = {
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "name": t_name,
+                    "content": str(tool_result)
+                }
+                conversation_history.append(tool_response_msg)
+            
+            # 3. Call LLM again to determine next step
+            recent_history = conversation_history[-10:]
+            current_messages = [{"role": "system", "content": system_prompt}] + recent_history
+            
+            is_last_iter = (iteration == MAX_TOOL_ITERATIONS)
+            
+            try:
+                res_data_next = await ai_router.chat_completion(
+                    messages=current_messages,
+                    tools=tools if not is_last_iter else None,
+                    temperature=0.3,
+                    max_tokens=400
+                )
+            except Exception as e:
+                yield f"Error in agent iteration {iteration}: {str(e)}"
+                return
+            
+            tool_calls = None
+            if res_data_next.tool_calls:
+                tool_calls = [
+                    {
+                        "id": tc.id,
+                        "type": tc.type,
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments
+                        }
+                    }
+                    for tc in res_data_next.tool_calls
+                ]
+                
+            message_data = {
+                "role": "assistant",
+                "content": res_data_next.content,
+                "tool_calls": tool_calls
+            }
+            
+            if not tool_calls or is_last_iter:
+                # Final response text achieved
+                content = message_data.get("content") or ""
                 conversation_history.append({"role": "assistant", "content": content})
                 
+                # Stream response text
                 for i in range(0, len(content), 5):
                     yield content[i:i+5]
                     await asyncio.sleep(0.01)
+                break
+        
+        # If no tool calls in initial response, stream content directly
+        if iteration == 0:
+            content = message_data.get("content") or ""
+            conversation_history.append({"role": "assistant", "content": content})
             
-            # Manage conversation history auto-summarization at the end of the turn
-            await auto_summarize_history_if_needed()
+            for i in range(0, len(content), 5):
+                yield content[i:i+5]
+                await asyncio.sleep(0.01)
+        
+        # Manage conversation history auto-summarization at the end of the turn
+        await auto_summarize_history_if_needed()
 
-        except Exception as e:
-            yield f"Error in agent processing: {str(e)}"
+    except Exception as e:
+        yield f"Error in agent processing: {str(e)}"
