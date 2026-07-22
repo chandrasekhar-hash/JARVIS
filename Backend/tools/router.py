@@ -85,38 +85,29 @@ async def handle_agent_chat(
 ) -> AsyncGenerator[str, None]:
     """
     Orchestrates the agent response flow.
-    First runs the lightweight Intent Classifier. If it's a simple deterministic
-    command, execution bypasses the LLM and runs the tool directly.
-    Otherwise, invokes the Groq LLM tool calling agent loop.
+    First routes through DesktopActionEngine (Intent Analysis -> Planner -> Validation -> Permission Manager -> Execution Manager -> Response).
+    If unhandled by the action engine (e.g. general reasoning questions), falls back to the LLM agent reasoning loop.
     """
     global conversation_history, active_state
     
-    # 1. Run the lightweight Intent Classifier first
-    direct_match = classify_intent(message)
-    if direct_match:
-        tool_name = direct_match["tool_name"]
-        tool_args = direct_match["arguments"]
-        print(f"DEBUG_LOG: [Classifier] Direct execution match: {tool_name} with args {tool_args}")
-        try:
-            # Execute matching tool (requires await since execute is async)
-            print(f"DEBUG_LOG: [Router/Classifier] Dispatching tool_name={tool_name!r} | tool_args={tool_args}")
-            result = await registry.execute(tool_name, **tool_args)
-            update_active_state(tool_name, tool_args)
-        except Exception as e:
-            result = f"Error executing direct command: {str(e)}"
-            
-        # Append to history
+    # 1. Process intent via DesktopActionEngine
+    from brain.action_engine import desktop_action_engine
+    engine_res = await desktop_action_engine.process_user_intent(message)
+
+    if engine_res.get("handled_by_engine"):
+        res_text = engine_res.get("response_text") or engine_res.get("message", "Task processed.")
         conversation_history.append({"role": "user", "content": message})
-        conversation_history.append({"role": "assistant", "content": result})
-        
-        # Auto-summarize if needed
+        conversation_history.append({"role": "assistant", "content": res_text})
+
         await auto_summarize_history_if_needed()
-        
-        # Stream the deterministic response back
-        for i in range(0, len(result), 5):
-            yield result[i:i+5]
+
+        for i in range(0, len(res_text), 5):
+            yield res_text[i:i+5]
             await asyncio.sleep(0.01)
         return
+
+    # Use resolved query if context or pronouns were updated
+    resolved_message = engine_res.get("resolved_query", message)
 
     # 2. Complex Reasoning Command (LLM loop)
     conversation_history.append({"role": "user", "content": message})

@@ -2,7 +2,7 @@ import sys
 import inspect
 import asyncio
 from typing import Callable, Dict, Any, List
-from tools.permissions import permission_manager
+from brain.permissions import permission_manager
 from tools.locks import get_tool_lock, destructive_lock
 from tools.logger import perf_tracker, log_tool_exec, log_tool_success, log_tool_failure, log_tool_timeout
 

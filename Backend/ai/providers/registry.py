@@ -81,8 +81,10 @@ from ai.providers.groq_provider import GroqProvider
 from ai.providers.gemini_provider import GeminiProvider
 from ai.providers.openrouter_provider import OpenRouterProvider
 from ai.providers.cerebras_provider import CerebrasProvider
+from ai.providers.ollama_provider import OllamaProvider
 
 provider_registry.register("groq", GroqProvider)
 provider_registry.register("gemini", GeminiProvider)
 provider_registry.register("openrouter", OpenRouterProvider)
 provider_registry.register("cerebras", CerebrasProvider)
+provider_registry.register("ollama", OllamaProvider)

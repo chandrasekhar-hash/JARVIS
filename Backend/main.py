@@ -261,8 +261,11 @@ async def ready_endpoint():
     is_ready = True
     
     # 1. Config Check
-    from config import ACTIVE_PROVIDER
-    if ACTIVE_PROVIDER == "gemini":
+    from config import ACTIVE_PROVIDER, OLLAMA_BASE_URL
+    if ACTIVE_PROVIDER == "ollama":
+        has_key = True
+        details["configuration"] = "valid"
+    elif ACTIVE_PROVIDER == "gemini":
         has_key = bool(os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY"))
         details["configuration"] = "valid" if has_key else "missing_gemini_key"
     elif ACTIVE_PROVIDER == "openrouter":
@@ -289,7 +292,17 @@ async def ready_endpoint():
     details["filesystem"] = "accessible" if desktop_exists else "restricted"
     
     # 4. Connection Check
-    if ACTIVE_PROVIDER == "gemini":
+    if ACTIVE_PROVIDER == "ollama":
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3.0)
+                details["ollama_connectivity"] = "connected" if res.status_code == 200 else "unreachable"
+                if res.status_code != 200:
+                    is_ready = False
+        except Exception:
+            details["ollama_connectivity"] = "unreachable"
+            is_ready = False
+    elif ACTIVE_PROVIDER == "gemini":
         try:
             async with httpx.AsyncClient() as client:
                 res = await client.get("https://generativelanguage.googleapis.com", timeout=3.0)
@@ -525,6 +538,44 @@ async def chat_endpoint(request: ChatRequest):
     prod_task = asyncio.create_task(producer_task())
     task_watchdog.register_task(prod_task, f"chat_producer::{req_id}", timeout=60.0)
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+# ==================================================
+# VISION REST API ENDPOINTS
+# ==================================================
+
+@app.get("/api/vision/status")
+def get_vision_status():
+    from vision import vision_service_manager
+    return vision_service_manager.get_service_status()
+
+@app.post("/api/vision/capture")
+def capture_vision_snapshot():
+    from vision import vision_adapter
+    return vision_adapter.get_brain_visual_context()
+
+@app.post("/api/vision/start")
+def start_vision_service(fps: float = 1.0):
+    from vision import vision_service_manager
+    success = vision_service_manager.start_vision(fps=fps)
+    return {"status": "started" if success else "failed", "fps": fps}
+
+@app.post("/api/vision/stop")
+def stop_vision_service():
+    from vision import vision_service_manager
+    success = vision_service_manager.stop_vision()
+    return {"status": "stopped" if success else "failed"}
+
+@app.post("/api/vision/pause")
+def pause_vision_service():
+    from vision import vision_service_manager
+    success = vision_service_manager.pause_vision()
+    return {"status": "paused" if success else "failed"}
+
+@app.post("/api/vision/resume")
+def resume_vision_service():
+    from vision import vision_service_manager
+    success = vision_service_manager.resume_vision()
+    return {"status": "resumed" if success else "failed"}
 
 if __name__ == "__main__":
     import uvicorn

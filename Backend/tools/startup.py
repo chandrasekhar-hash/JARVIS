@@ -19,7 +19,13 @@ def verify_startup():
         
     # 2. Environment variables verification
     from config import ACTIVE_PROVIDER
-    if ACTIVE_PROVIDER == "gemini":
+    if ACTIVE_PROVIDER == "ollama":
+        from ai.providers.ollama_provider import OllamaProvider
+        op = OllamaProvider()
+        if not op.health_check():
+            err = f"Startup diagnostic failed: Ollama server at '{op.base_url}' is unreachable or model '{op.model_name}' is unavailable."
+            raise RuntimeError(err)
+    elif ACTIVE_PROVIDER == "gemini":
         gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY")
         if not gemini_key:
             err = "Startup diagnostic failed: Required environment variable 'GEMINI_API_KEY' is missing."
@@ -39,6 +45,18 @@ def verify_startup():
         if not groq_key:
             err = "Startup diagnostic failed: Required environment variable 'GROQ_API_KEY' is missing."
             raise RuntimeError(err)
+            
+    # Non-blocking diagnostic check for Ollama when active provider is not Ollama
+    if ACTIVE_PROVIDER != "ollama":
+        try:
+            from ai.providers.ollama_provider import OllamaProvider
+            op = OllamaProvider()
+            if op.health_check():
+                log_structured(backend_log, "INFO", f"[Startup] Ollama server is reachable at {op.base_url} (Model: {op.model_name})")
+            else:
+                log_structured(backend_log, "WARNING", f"[Startup] Ollama server at {op.base_url} is unreachable or model '{op.model_name}' is unavailable. Continuing without local Ollama provider.")
+        except Exception as ex:
+            log_structured(backend_log, "WARNING", f"[Startup] Non-blocking Ollama diagnostic check error: {str(ex)}")
         
     # 3. Write permission tests in required directories
     required_dirs = ["logs", "tts_engines"]
@@ -54,8 +72,10 @@ def verify_startup():
             raise RuntimeError(err)
             
     # 4. Tool Registry integrity check
-    # Import tools to trigger registry decorators
-    import tools
+    import tools.apps
+    import tools.browser
+    import tools.desktop
+    import tools.filesystem
     schemas = registry.get_tool_schemas()
     if not schemas:
         err = "Startup diagnostic failed: Tool Registry is empty. No tools registered."
