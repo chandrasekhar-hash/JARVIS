@@ -338,3 +338,6 @@ class AppCacheManager:
         if not apps:
             apps = self.refresh()
         return apps
+
+app_cache_manager = AppCacheManager()
+

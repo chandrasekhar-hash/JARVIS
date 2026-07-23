@@ -88,10 +88,13 @@ class DesktopContextManager:
         self.current_dir: Optional[str] = None
 
         # Context Provider Registry
+        from memory.context_provider import MemoryContextProvider
         self._providers: List[BaseContextProvider] = [
             DesktopStateContextProvider(self),
-            VisionContextProvider()
+            VisionContextProvider(),
+            MemoryContextProvider()
         ]
+
 
     def register_provider(self, provider: BaseContextProvider) -> None:
         """Registers a new context provider (e.g. MemoryContextProvider, PluginContextProvider)."""

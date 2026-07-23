@@ -1,6 +1,13 @@
 # Tools package exports
 import sys
 
+# Ensure tool modules are loaded and registered with registry
+import tools.apps
+import tools.browser
+import tools.desktop
+import tools.filesystem
+
+
 def __getattr__(name: str):
     """Dynamic resolution of legacy tools imports to brain components."""
     legacy_brain_map = {

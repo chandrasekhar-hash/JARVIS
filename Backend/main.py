@@ -3,7 +3,9 @@ import json
 import time
 import re
 import asyncio
+from typing import List, Optional, Dict, Any
 from collections import OrderedDict
+
 import httpx
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -256,7 +258,9 @@ def health_endpoint():
 
 
 @app.get("/ready")
+@app.get("/readiness")
 async def ready_endpoint():
+
     details = {}
     is_ready = True
     
@@ -540,8 +544,61 @@ async def chat_endpoint(request: ChatRequest):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 # ==================================================
+# DESKTOP REST API ENDPOINTS
+# ==================================================
+
+@app.get("/api/desktop/apps")
+async def get_desktop_apps():
+    from tools.app_discovery import app_cache_manager
+    apps = app_cache_manager.load_or_refresh()
+    return {"count": len(apps), "apps": [app.to_dict() for app in apps[:50]]}
+
+
+@app.get("/api/desktop/windows")
+async def get_desktop_windows():
+    from tools.desktop import window_list
+    res = await window_list()
+    return {"result": res}
+
+
+# ==================================================
+# SETTINGS REST API ENDPOINTS
+# ==================================================
+
+class SettingsRequest(BaseModel):
+    active_provider: Optional[str] = None
+    routing_mode: Optional[str] = None
+    tts_engine: Optional[str] = None
+
+@app.get("/api/settings")
+def get_settings():
+    import config
+    from ai.providers.registry import provider_registry
+    return {
+        "active_provider": getattr(config, "ACTIVE_PROVIDER", "groq"),
+        "routing_mode": getattr(config, "ROUTING_MODE", "manual"),
+        "tts_engine": getattr(config, "TTS_ENGINE", "edge"),
+        "registered_providers": list(provider_registry.get_registered_providers().keys())
+    }
+
+@app.post("/api/settings")
+def update_settings(settings: SettingsRequest):
+    import config
+    if settings.active_provider:
+        config.ACTIVE_PROVIDER = settings.active_provider.lower().strip()
+        os.environ["ACTIVE_PROVIDER"] = config.ACTIVE_PROVIDER
+    if settings.routing_mode:
+        config.ROUTING_MODE = settings.routing_mode.lower().strip()
+        os.environ["ROUTING_MODE"] = config.ROUTING_MODE
+    if settings.tts_engine:
+        config.TTS_ENGINE = settings.tts_engine.lower().strip()
+        os.environ["TTS_ENGINE"] = config.TTS_ENGINE
+    return {"status": "success", "settings": get_settings()}
+
+# ==================================================
 # VISION REST API ENDPOINTS
 # ==================================================
+
 
 @app.get("/api/vision/status")
 def get_vision_status():
@@ -577,6 +634,82 @@ def resume_vision_service():
     success = vision_service_manager.resume_vision()
     return {"status": "resumed" if success else "failed"}
 
+# ==================================================
+# MEMORY REST API ENDPOINTS (PHASE 4)
+# ==================================================
+
+class MemoryQueryRequest(BaseModel):
+    query_text: str
+    types: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    top_k: int = 5
+
+class MemoryStoreRequest(BaseModel):
+    title: str
+    content: str
+    type: str = "episodic"
+    tags: Optional[List[str]] = None
+    importance: float = 5.0
+
+class MemoryForgetRequest(BaseModel):
+    memory_id: Optional[str] = None
+    tag: Optional[str] = None
+    memory_type: Optional[str] = None
+
+@app.post("/api/memory/query")
+async def query_memory_api(req: MemoryQueryRequest):
+    from memory import retrieval_pipeline, MemoryQuery, MemoryType
+    m_types = [MemoryType(t) for t in req.types] if req.types else None
+    query = MemoryQuery(query_text=req.query_text, types=m_types, tags=req.tags, top_k=req.top_k)
+    pkg = await retrieval_pipeline.execute(query)
+    return {
+        "status": "success",
+        "has_context": pkg.has_context,
+        "memory_count": pkg.memory_count,
+        "formatted_context": pkg.formatted_context,
+        "retrieved_memories": pkg.retrieved_memories
+    }
+
+@app.post("/api/memory/store")
+async def store_memory_api(req: MemoryStoreRequest):
+    from memory import ObservationCapture, ingestion_pipeline
+    obs = ObservationCapture.from_conversation(req.title, req.content)
+    obs.tags = req.tags or []
+    mem_id = await ingestion_pipeline.process_observation(obs)
+    return {"status": "success", "memory_id": mem_id}
+
+@app.post("/api/memory/forget")
+async def forget_memory_api(req: MemoryForgetRequest):
+    from memory import memory_manager
+    if req.memory_id:
+        success = await memory_manager.delete_memory(req.memory_id)
+        return {"status": "success" if success else "not_found", "memory_id": req.memory_id}
+    else:
+        purged = await memory_manager.forget_memory(tag=req.tag, memory_type=req.memory_type)
+        return {"status": "success", "purged_count": purged}
+
+@app.get("/api/memory/graph")
+async def get_memory_graph_api():
+    from memory import memory_manager
+    summary = await memory_manager.get_summary()
+    return {
+        "status": "success",
+        "total_nodes": summary.total_nodes,
+        "total_edges": summary.total_edges
+    }
+
+@app.get("/api/memory/summary")
+async def get_memory_summary_api():
+    from memory import memory_manager
+    summary = await memory_manager.get_summary()
+    return {
+        "status": "success",
+        "total_memories": summary.total_memories,
+        "count_by_type": summary.count_by_type,
+        "storage_bytes": summary.storage_bytes
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
