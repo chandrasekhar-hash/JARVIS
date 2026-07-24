@@ -22,8 +22,11 @@ from tools.router import handle_agent_chat
 from tools.startup import verify_startup
 from tools.telemetry import task_watchdog, telemetry_manager, log_structured, backend_log, request_id_var
 from tools.bridge import event_queue_var, bridge_manager
+from api.autonomous import router as autonomous_router
 
 app = FastAPI(title="J.A.R.V.I.S. Core Backend API")
+app.include_router(autonomous_router)
+
 
 def shutdown_handler():
     print("DEBUG_LOG: [Shutdown] Shutdown/interruption signal received. Cleaning resources...")
