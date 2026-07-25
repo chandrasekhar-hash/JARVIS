@@ -3,7 +3,6 @@ from typing import List, Dict, Any, Optional, Set
 from memory.models.memory import Memory
 from memory.models.query import MemoryQuery, MemoryResult
 from memory.storage.base import BaseMemoryStorageProvider, BaseVectorStorageProvider
-from memory.manager import memory_manager, MemoryManager
 from tools.telemetry import log_structured, backend_log
 
 
@@ -18,7 +17,11 @@ class CandidateSearchEngine:
         memory_storage: Optional[BaseMemoryStorageProvider] = None,
         vector_storage: Optional[BaseVectorStorageProvider] = None
     ):
-        self.memory_storage = memory_storage or memory_manager._storage
+        if memory_storage is None:
+            from memory.storage.provider_factory import StorageProviderFactory
+            self.memory_storage = StorageProviderFactory.get_memory_provider()
+        else:
+            self.memory_storage = memory_storage
         self.vector_storage = vector_storage
 
     async def search_relational(self, query: MemoryQuery) -> List[MemoryResult]:

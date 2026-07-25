@@ -16,7 +16,7 @@ import signal
 import atexit
 import os
 
-from config import TTS_ENGINE
+from config import TTS_ENGINE, CORS_ORIGINS
 from tts_engines import tts_manager
 from tools.router import handle_agent_chat
 from tools.startup import verify_startup
@@ -60,7 +60,7 @@ def startup_event():
 # Enable CORS for frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict to specific domains in production
+    allow_origins=CORS_ORIGINS,  # Configurable via config.py / CORS_ORIGINS env var
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

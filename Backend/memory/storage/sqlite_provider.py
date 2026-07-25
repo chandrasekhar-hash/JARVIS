@@ -251,7 +251,7 @@ class SQLiteMemoryStorageProvider(BaseMemoryStorageProvider):
     ) -> List[Memory]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            query = "SELECT memory_id FROM memories"
+            query = "SELECT * FROM memories"
             params = []
             conditions = []
 
@@ -270,12 +270,67 @@ class SQLiteMemoryStorageProvider(BaseMemoryStorageProvider):
 
             cursor.execute(query, params)
             rows = cursor.fetchall()
-            
+            if not rows:
+                return []
+
+            now = time.time()
+            memory_ids = [r["memory_id"] for r in rows]
+            placeholders = ",".join(["?"] * len(memory_ids))
+
+            # Batch update access count and last_accessed
+            cursor.execute(
+                f"UPDATE memories SET access_count = access_count + 1, last_accessed = ? WHERE memory_id IN ({placeholders})",
+                [now] + memory_ids
+            )
+
+            # Batch load chunks for all memories
+            cursor.execute(
+                f"SELECT * FROM memory_chunks WHERE memory_id IN ({placeholders}) ORDER BY chunk_index ASC",
+                memory_ids
+            )
+            chunk_rows = cursor.fetchall()
+            chunks_by_memory: Dict[str, List[MemoryChunk]] = {mid: [] for mid in memory_ids}
+            for crow in chunk_rows:
+                emb = json.loads(crow["embedding_json"]) if crow["embedding_json"] else None
+                mid = crow["memory_id"]
+                if mid in chunks_by_memory:
+                    chunks_by_memory[mid].append(MemoryChunk(
+                        chunk_id=crow["chunk_id"],
+                        memory_id=mid,
+                        content=crow["content"],
+                        embedding=emb,
+                        chunk_index=crow["chunk_index"]
+                    ))
+
+            conn.commit()
+
             memories = []
-            for r in rows:
-                mem = self._get_memory_sync(r["memory_id"])
-                if mem:
-                    memories.append(mem)
+            for row in rows:
+                tags = json.loads(row["tags_json"]) if row["tags_json"] else []
+                meta = MemoryMetadata(
+                    importance_score=row["importance_score"],
+                    confidence=row["confidence"],
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
+                    last_accessed=now,
+                    access_count=row["access_count"] + 1,
+                    expires_at=row["expires_at"],
+                    pinned=bool(row["pinned"]),
+                    source=row["source"],
+                    retention_policy=RetentionPolicy(row["retention_policy"]),
+                    privacy_level=row["privacy_level"],
+                    tags=tags
+                )
+                memories.append(Memory(
+                    memory_id=row["memory_id"],
+                    type=MemoryType(row["type"]),
+                    title=row["title"],
+                    content=row["content"],
+                    summary=row["summary"] or "",
+                    chunks=chunks_by_memory.get(row["memory_id"], []),
+                    metadata=meta
+                ))
+
             return memories
 
     async def list_memories(

@@ -5,7 +5,9 @@ use std::env;
 pub struct RuntimeConfig {
     pub python_path: PathBuf,
     pub backend_script: PathBuf,
+    #[allow(dead_code)]
     pub backend_host: String,
+    #[allow(dead_code)]
     pub backend_port: u16,
     pub health_url: String,
     pub max_restart_retries: usize,
