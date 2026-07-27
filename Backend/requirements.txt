@@ -5,4 +5,7 @@ httpx
 python-dotenv
 google-generativeai
 psutil
-
+beautifulsoup4
+pillow
+pyautogui
+pyperclip
