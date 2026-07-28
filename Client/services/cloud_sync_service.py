@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from typing import Dict, Any, Optional
 from Client.sync.sync_manager import client_sync_manager, ClientSyncManager
 from Client.sync.scheduler import intelligent_scheduler, SyncTrigger
@@ -32,10 +33,24 @@ class CloudSyncService:
         logger.info(f"Syncing tasks update: {tasks_dict}")
         return self.sync_manager.submit_local_change("tasks", tasks_dict)
 
+    def resolve_conflict(self, conflict_id: str, choice: str) -> bool:
+        """
+        Manually resolves a conflict given conflict_id and choice ("local" or "remote").
+        """
+        if choice == "local":
+            return self.sync_manager.conflicts.user_override_local(conflict_id)
+        elif choice == "remote":
+            return self.sync_manager.conflicts.user_override_remote(conflict_id)
+        return False
+
     def force_sync(self) -> Dict[str, Any]:
         logger.info("Manual force sync requested by user.")
         intelligent_scheduler.trigger_sync(SyncTrigger.MANUAL)
-        replayed = self.sync_manager.replay_offline_queue()
+        try:
+            loop = asyncio.get_running_loop()
+            replayed = loop.create_task(self.sync_manager.replay_offline_queue())
+        except RuntimeError:
+            replayed = asyncio.run(self.sync_manager.replay_offline_queue())
         return {"status": "triggered", "replayed_offline_ops": replayed}
 
     def get_status(self) -> Dict[str, Any]:

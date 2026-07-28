@@ -96,10 +96,18 @@ graph TD
 
 9. **Client-Side Synchronization Architecture (`Client/sync/` & `Client/services/`)**:
    - Dedicated client-side synchronization subsystem providing local-first, offline-first operation for Desktop assistant and Mobile client instances.
-   - Async `WebSocketSyncClient` managing connection lifecycle, exponential backoff reconnects (`1s` → `2s` → `4s` → `8s` → max `30s`), and automatic JWT token refresh.
-   - `OfflineStore` SQLite driver (`logs/client_sync.db` or in-memory) storing checkpoints, watermarks, credentials, and entity state cache.
-   - `ReplayQueue` buffering local offline operations and replaying sequence-ordered updates upon reconnection with duplicate message deduplication.
-   - `ConflictHandler` coordinating CRDT automatic merges and producing structured user review notifications (`ConflictReviewNotification`).
+   - Async `WebSocketSyncClient` managing 7-state connection machine (`DISCONNECTED` → `CONNECTED`), 15s heartbeat timers with 45s stale socket detection, background frame listener loop, exponential backoff reconnects (`1s` → `2s` → `4s` → `8s` → max `30s`), and automatic JWT token refresh.
+   - `OfflineStore` SQLite driver (`logs/client_sync.db` or in-memory) storing checkpoints, watermarks, credentials, state cache, and durable pending operations.
+   - `ReplayQueue` buffering local offline operations with durable operation ACK deletion semantics and idempotent message deduplication.
+   - `ConflictHandler` coordinating CRDT automatic merges, producing review objects, and handling manual resolution overrides (`user_override_local` & `user_override_remote`).
    - `IntelligentSyncScheduler` managing trigger-based background synchronization (startup, local change, network restoration, 60s periodic, manual).
-   - `ConnectionMonitor` exposing real-time connection state (`CONNECTED`, `CONNECTING`, `OFFLINE`, `SYNCHRONIZING`, `ERROR`), quality score, and UI listener callbacks.
+   - `ConnectionMonitor` exposing real-time connection state (`DISCONNECTED`, `CONNECTING`, `AUTHENTICATING`, `SYNCHRONIZING`, `CONNECTED`, `RECONNECTING`, `ERROR`), quality score, and UI listener callbacks.
    - Master `ClientSyncManager` entrypoint and high-level `CloudSyncService` API.
+
+10. **Remote Intelligence & Cross-Device Execution Mesh (`Cloud/intelligence/` & `Cloud/services/`)**:
+    - **Remote LLM Inference Offloader (`RemoteInferenceOffloader`)**: Multi-provider LLM routing (Groq, Gemini, OpenRouter) with independent `CircuitBreakers` (`CLOSED` → `OPEN` → `HALF_OPEN`) and streaming SSE responses.
+    - **Cross-Device Context Sharing Mesh (`ContextMeshService`)**: Aggregates active device context snapshots with versioning, confidence scores, and TTL expirations (`CrossDeviceContextProvider`).
+    - **Cryptographic Remote Execution Trust Model (`RemoteAgentService`)**: Zero-Trust remote agent command execution verifying Ed25519 payload signatures, nonces against replay cache, and capability authorization.
+    - **Distributed Job Orchestrator (`JobOrchestrator`)**: Job lifecycle manager (`QUEUED` → `RUNNING` → `COMPLETED` → `FAILED` → `CANCELLED`), priority queues, retries, and timeouts.
+    - **Cloud Scheduler Relay (`CloudSchedulerRelay`)**: Automated task relay executing background autonomous tasks in Cloud when primary scheduling device goes offline.
+    - **Proactive Multi-Device Notification Mesh (`NotificationMeshService`)**: Real-time notification broadcast engine over WebSocket gateway channels.

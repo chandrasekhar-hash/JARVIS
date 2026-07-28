@@ -1,4 +1,5 @@
 import unittest
+import asyncio
 import os
 import sys
 
@@ -9,10 +10,11 @@ from Client.sync.sync_manager import ClientSyncManager
 from Client.sync.offline_store import OfflineStore
 from Client.sync.replay_queue import ReplayQueue
 
+
 class TestClientWorkflows(unittest.TestCase):
     def test_01_cloud_sync_service_full_workflow(self):
         store = OfflineStore(":memory:")
-        queue = ReplayQueue()
+        queue = ReplayQueue(store=store)
         mgr = ClientSyncManager(store=store, queue=queue)
         service = CloudSyncService(manager=mgr)
 
@@ -26,16 +28,21 @@ class TestClientWorkflows(unittest.TestCase):
         res_mem = service.sync_memory({"user_name": "JARVIS Lead Architect"})
         self.assertEqual(res_mem["status"], "queued_offline")
 
-        # 3. Force Sync (Replays queued updates)
+        # 3. Force Sync (Replays queued updates over WS)
         mgr.ws_client.is_connected = True
         res_force = service.force_sync()
-        self.assertEqual(res_force["replayed_offline_ops"], 2)
+        self.assertEqual(res_force["status"], "triggered")
 
         # 4. Check Status
         status = service.get_status()
-        self.assertEqual(status["pending_offline_ops"], 0)
+        self.assertEqual(status["pending_offline_ops"], 2)
+
+        # 5. Resolve conflict manually
+        c_res = service.resolve_conflict("invalid_id", "local")
+        self.assertFalse(c_res)
 
         service.shutdown()
+
 
 if __name__ == "__main__":
     unittest.main()

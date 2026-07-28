@@ -69,3 +69,46 @@ class CloudConfigurationModel(Base):
     config_key = Column(String(128), primary_key=True)
     config_value = Column(Text, nullable=False)
     updated_at = Column(Float, nullable=False, default=time.time)
+
+
+class CloudContextSnapshotModel(Base):
+    __tablename__ = "cloud_context_snapshots"
+
+    snapshot_id = Column(String(64), primary_key=True)
+    user_id = Column(String(64), nullable=False)
+    device_id = Column(String(64), nullable=False)
+    context_type = Column(String(64), nullable=False)
+    version = Column(Integer, nullable=False, default=1)
+    confidence = Column(Float, nullable=False, default=1.0)
+    snapshot_json = Column(Text, nullable=False, default="{}")
+    expires_at = Column(Float, nullable=False)
+    created_at = Column(Float, nullable=False, default=time.time)
+
+
+class CloudNotificationModel(Base):
+    __tablename__ = "cloud_notifications"
+
+    notification_id = Column(String(64), primary_key=True)
+    user_id = Column(String(64), nullable=False)
+    target_device_id = Column(String(64), nullable=True)
+    title = Column(String(128), nullable=False)
+    body = Column(Text, nullable=False)
+    category = Column(String(64), nullable=False, default="info")
+    status = Column(String(32), nullable=False, default="unread")
+    created_at = Column(Float, nullable=False, default=time.time)
+
+
+class CloudRemoteJobModel(Base):
+    __tablename__ = "cloud_remote_jobs"
+
+    job_id = Column(String(64), primary_key=True)
+    user_id = Column(String(64), nullable=False)
+    origin_device_id = Column(String(64), nullable=False)
+    execution_node_id = Column(String(64), nullable=True)
+    task_type = Column(String(64), nullable=False)
+    priority = Column(Integer, nullable=False, default=5)
+    status = Column(String(32), nullable=False, default="QUEUED")
+    retry_count = Column(Integer, nullable=False, default=0)
+    trace_id = Column(String(64), nullable=False)
+    created_at = Column(Float, nullable=False, default=time.time)
+    updated_at = Column(Float, nullable=False, default=time.time)

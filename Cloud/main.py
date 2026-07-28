@@ -7,12 +7,13 @@ from routes.device_routes import router as device_router
 from routes.identity_routes import router as identity_router
 from routes.health_routes import router as health_router
 from routes.websocket_routes import router as websocket_router
+from routes.intelligence_routes import router as intelligence_router
 from websocket.heartbeat import heartbeat_monitor
 
 app = FastAPI(
     title=cloud_settings.app_name,
-    version="2.0.0",
-    description="J.A.R.V.I.S. Cloud API Gateway & Synchronization Engine (Phase 8.3)",
+    version="2.5.0",
+    description="J.A.R.V.I.S. Cloud API Gateway & Remote Intelligence Subsystem (Phase 8.5)",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json"
@@ -33,6 +34,7 @@ app.include_router(device_router)
 app.include_router(identity_router)
 app.include_router(health_router)
 app.include_router(websocket_router)
+app.include_router(intelligence_router)
 
 @app.on_event("startup")
 async def startup_event():

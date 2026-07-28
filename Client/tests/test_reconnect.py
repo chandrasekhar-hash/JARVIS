@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from Client.sync.websocket_client import WebSocketSyncClient
 from Client.sync.connection_monitor import ConnectionMonitor
 
+
 class TestReconnectAndMonitor(unittest.TestCase):
     def test_01_connection_monitor_state_listener(self):
         monitor = ConnectionMonitor()
@@ -29,6 +30,14 @@ class TestReconnectAndMonitor(unittest.TestCase):
         self.assertEqual(ws_client.access_token, "token_access_123")
         self.assertEqual(ws_client.get_next_sequence_number(), 1)
         self.assertEqual(ws_client.get_next_sequence_number(), 2)
+
+    def test_03_refresh_access_token_signature(self):
+        ws_client = WebSocketSyncClient()
+        ws_client.set_credentials("token_access_123", "token_refresh_456", "usr_1", "dev_1")
+        # Ensure refresh_access_token executes cleanly without TypeError signature error
+        res = asyncio.run(ws_client.refresh_access_token())
+        self.assertIsInstance(res, bool)
+
 
 if __name__ == "__main__":
     unittest.main()

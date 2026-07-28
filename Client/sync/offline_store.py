@@ -3,7 +3,7 @@ import json
 import time
 import sqlite3
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger("JARVIS_Client_OfflineStore")
 
@@ -142,6 +142,61 @@ class OfflineStore:
         if not row:
             return None
         return json.loads(row["snapshot_json"])
+
+    def save_pending_op(self, op: Dict[str, Any]):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO client_pending_ops (op_id, entity_type, changes_json, sequence_number, timestamp, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(op_id) DO UPDATE SET
+                status = excluded.status
+        """, (
+            op["message_id"],
+            op["entity_type"],
+            json.dumps(op["changes"]),
+            op["sequence_number"],
+            op.get("timestamp", time.time()),
+            op.get("status", "pending")
+        ))
+        conn.commit()
+        if not self._memory_conn:
+            conn.close()
+
+    def get_all_pending_ops(self) -> List[Dict[str, Any]]:
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM client_pending_ops ORDER BY sequence_number ASC, timestamp ASC")
+        rows = cursor.fetchall()
+        if not self._memory_conn:
+            conn.close()
+        ops = []
+        for r in rows:
+            ops.append({
+                "message_id": r["op_id"],
+                "entity_type": r["entity_type"],
+                "changes": json.loads(r["changes_json"]),
+                "sequence_number": r["sequence_number"],
+                "timestamp": r["timestamp"],
+                "status": r["status"]
+            })
+        return ops
+
+    def remove_pending_op(self, op_id: str):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM client_pending_ops WHERE op_id = ?", (op_id,))
+        conn.commit()
+        if not self._memory_conn:
+            conn.close()
+
+    def clear_pending_ops(self):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM client_pending_ops")
+        conn.commit()
+        if not self._memory_conn:
+            conn.close()
 
 
 offline_store = OfflineStore()

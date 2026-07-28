@@ -3,6 +3,7 @@ import json
 import uuid
 import logging
 from typing import Dict, Any, List, Set, Optional
+from Client.sync.offline_store import offline_store, OfflineStore
 
 logger = logging.getLogger("JARVIS_Client_ReplayQueue")
 
@@ -10,11 +11,12 @@ logger = logging.getLogger("JARVIS_Client_ReplayQueue")
 class ReplayQueue:
     """
     Client ReplayQueue buffering offline updates when network connectivity drops.
-    Survives restarts via memory/store and dispatches sequence-ordered updates on reconnect.
+    Persists operations to SQLite (client_pending_ops) to survive application restarts.
+    Implements durable ACK semantics (operations are removed only upon server ACK).
     """
 
-    def __init__(self):
-        self._queue: List[Dict[str, Any]] = []
+    def __init__(self, store: Optional[OfflineStore] = None):
+        self.store = store or offline_store
         self._processed_msg_ids: Set[str] = set()
 
     def is_duplicate(self, message_id: str) -> bool:
@@ -32,27 +34,35 @@ class ReplayQueue:
             "timestamp": time.time(),
             "status": "pending"
         }
-        self._queue.append(op)
-        logger.info(f"Enqueued offline operation '{op['message_id']}' (seq {sequence_number}). Total queued: {len(self._queue)}")
+        self.store.save_pending_op(op)
+        logger.info(f"Enqueued & persisted offline operation '{op['message_id']}' (seq {sequence_number}).")
         return op
 
     def get_pending_count(self) -> int:
-        return len(self._queue)
+        return len(self.store.get_all_pending_ops())
 
     def peek_queue(self) -> List[Dict[str, Any]]:
-        return list(self._queue)
+        return self.store.get_all_pending_ops()
 
     def drain_and_sort_queue(self) -> List[Dict[str, Any]]:
         """
-        Sorts queue chronologically by sequence_number/timestamp and empties pending buffer.
+        Retrieves pending operations sorted chronologically.
+        Does NOT delete them until durable ACK is received.
         """
-        sorted_ops = sorted(self._queue, key=lambda x: (x.get("sequence_number", 0), x.get("timestamp", 0)))
-        self._queue.clear()
-        logger.info(f"Drained {len(sorted_ops)} offline operations for replay.")
+        ops = self.store.get_all_pending_ops()
+        sorted_ops = sorted(ops, key=lambda x: (x.get("sequence_number", 0), x.get("timestamp", 0)))
+        logger.info(f"Retrieved {len(sorted_ops)} pending offline operations for replay.")
         return sorted_ops
 
+    def mark_acknowledged(self, op_id: str):
+        """
+        Removes operation from SQLite pending operations table upon server ACK confirmation.
+        """
+        self.store.remove_pending_op(op_id)
+        logger.info(f"Durable ACK confirmed for operation '{op_id}'. Removed from SQLite buffer.")
+
     def clear(self):
-        self._queue.clear()
+        self.store.clear_pending_ops()
 
 
 replay_queue = ReplayQueue()
