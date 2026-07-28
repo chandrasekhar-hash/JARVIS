@@ -111,3 +111,14 @@ graph TD
     - **Distributed Job Orchestrator (`JobOrchestrator`)**: Job lifecycle manager (`QUEUED` → `RUNNING` → `COMPLETED` → `FAILED` → `CANCELLED`), priority queues, retries, and timeouts.
     - **Cloud Scheduler Relay (`CloudSchedulerRelay`)**: Automated task relay executing background autonomous tasks in Cloud when primary scheduling device goes offline.
     - **Proactive Multi-Device Notification Mesh (`NotificationMeshService`)**: Real-time notification broadcast engine over WebSocket gateway channels.
+
+11. **Ecosystem & Developer Platform Architecture (`sdk/`, `Backend/plugins/`, `Cloud/marketplace/`, `Cloud/webhooks/`)**:
+    - **Isolated Subprocess Plugin Sandbox (`PluginSandbox`)**: Executes third-party plugins in process-isolated subprocesses enforcing memory quotas (max 256MB), CPU limits, and timeouts.
+    - **Capability Permission Engine (`PermissionEngine`)**: Validates requested capabilities (`fs:read`, `net:outbound`, `system:exec`, `speech:tts`) against manifest declarations.
+    - **6-State Plugin Lifecycle (`PluginLifecycleManager`)**: State machine (`INSTALLING` → `UNINSTALLED`) executing lifecycle hooks (`on_install`, `on_enable`, `on_disable`, `on_upgrade`, `on_uninstall`).
+    - **Official Developer SDK & CLI (`jarvis-sdk`)**: Published Python SDK (`sdk/python/jarvis_sdk`) with `@jarvis_plugin` and `@jarvis_tool` decorators, `PluginTestHarness`, and `jarvis-plugin` CLI.
+    - **Cloud Plugin Marketplace (`MarketplaceService`)**: Verified publisher repository serving search/install endpoints and checking Ed25519 signatures and semantic version constraints (`sdk_version`, `api_version`, `minimum_runtime`).
+    - **Outbound Webhook Engine (`WebhookService`)**: Standardized event contract (`event_id`, `trace_id`, `timestamp`, `version`, `producer`, `payload`) with HMAC-SHA256 signature verification and exponential backoff retry queues with Dead-Letter Queue (DLQ).
+    - **Declarative Automation Engine (`WorkflowEngine`)**: Multi-step DAG workflow runner (Triggers → Conditions → Actions) with persistent state resumption.
+    - **Public Developer API & Keys**: Issues `jrv_live_...` developer keys with OAuth2 scope enforcement and audit logging.
+    - **React Marketplace UI (`MarketplaceView.jsx`)**: Comprehensive React dashboard view.

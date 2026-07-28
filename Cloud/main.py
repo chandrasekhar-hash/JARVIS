@@ -8,12 +8,15 @@ from routes.identity_routes import router as identity_router
 from routes.health_routes import router as health_router
 from routes.websocket_routes import router as websocket_router
 from routes.intelligence_routes import router as intelligence_router
+from routes.marketplace_routes import router as marketplace_router
+from routes.webhook_routes import router as webhook_router
+from routes.developer_routes import router as developer_router
 from websocket.heartbeat import heartbeat_monitor
 
 app = FastAPI(
     title=cloud_settings.app_name,
-    version="2.5.0",
-    description="J.A.R.V.I.S. Cloud API Gateway & Remote Intelligence Subsystem (Phase 8.5)",
+    version="3.0.0",
+    description="J.A.R.V.I.S. Cloud API Gateway & Ecosystem Platform (Phase 9)",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json"
@@ -35,6 +38,9 @@ app.include_router(identity_router)
 app.include_router(health_router)
 app.include_router(websocket_router)
 app.include_router(intelligence_router)
+app.include_router(marketplace_router)
+app.include_router(webhook_router)
+app.include_router(developer_router)
 
 @app.on_event("startup")
 async def startup_event():

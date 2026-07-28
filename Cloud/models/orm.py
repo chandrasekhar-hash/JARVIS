@@ -1,5 +1,5 @@
 import time
-from sqlalchemy import Column, String, Float, Integer, Text, ForeignKey
+from sqlalchemy import Column, String, Float, Integer, Text, ForeignKey, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -112,3 +112,51 @@ class CloudRemoteJobModel(Base):
     trace_id = Column(String(64), nullable=False)
     created_at = Column(Float, nullable=False, default=time.time)
     updated_at = Column(Float, nullable=False, default=time.time)
+
+
+class CloudPluginModel(Base):
+    __tablename__ = "cloud_plugins"
+
+    plugin_id = Column(String(64), primary_key=True)
+    publisher_id = Column(String(64), nullable=False)
+    name = Column(String(128), nullable=False)
+    version = Column(String(32), nullable=False)
+    sdk_version = Column(String(32), nullable=False, default="1.0")
+    api_version = Column(String(32), nullable=False, default="1")
+    minimum_runtime = Column(String(32), nullable=False, default="1.0.0")
+    category = Column(String(64), nullable=False, default="productivity")
+    description = Column(Text, nullable=False)
+    capabilities_json = Column(Text, nullable=False, default="[]")
+    package_url = Column(Text, nullable=False)
+    signature_b64 = Column(Text, nullable=False)
+    downloads_count = Column(Integer, nullable=False, default=0)
+    rating = Column(Float, nullable=False, default=5.0)
+    is_trusted = Column(Boolean, nullable=False, default=True)
+    status = Column(String(32), nullable=False, default="published")
+    created_at = Column(Float, nullable=False, default=time.time)
+
+
+class CloudWebhookSubscriptionModel(Base):
+    __tablename__ = "cloud_webhook_subscriptions"
+
+    subscription_id = Column(String(64), primary_key=True)
+    user_id = Column(String(64), nullable=False)
+    event_type = Column(String(64), nullable=False)
+    target_url = Column(Text, nullable=False)
+    secret_token = Column(String(128), nullable=False)
+    status = Column(String(32), nullable=False, default="active")
+    created_at = Column(Float, nullable=False, default=time.time)
+
+
+class CloudDeveloperKeyModel(Base):
+    __tablename__ = "cloud_developer_keys"
+
+    key_id = Column(String(64), primary_key=True)
+    user_id = Column(String(64), nullable=False)
+    api_key_hash = Column(String(128), nullable=False)
+    key_prefix = Column(String(16), nullable=False)
+    name = Column(String(128), nullable=False)
+    scopes_json = Column(Text, nullable=False, default="[]")
+    status = Column(String(32), nullable=False, default="active")
+    created_at = Column(Float, nullable=False, default=time.time)
+    expires_at = Column(Float, nullable=True)
