@@ -26,7 +26,7 @@ class CerebrasProvider(AIProvider):
             supports_long_context=True,
             supports_embeddings=False,
             average_latency=0.15,
-            priority=12
+            priority=7
         )
 
     def _ensure_config(self) -> None:

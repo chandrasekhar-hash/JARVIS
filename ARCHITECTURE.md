@@ -56,3 +56,9 @@ graph TD
    - ContextVar tracing propagates `request_id`, `session_id`, and `conversation_id` transparently.
    - Logging outputs structured JSON to rotating files under `logs/`.
    - Exposes process status and stats via `/health`, `/ready`, and `/metrics`.
+
+5. **Persistent Autonomous Scheduler (`Backend/autonomous/`)**:
+   - Reuses SQLite database at `logs/jarvis_memory.db` to persist scheduled jobs and execution records across application restarts.
+   - `ScheduleParser` parses natural language expressions ("Every morning at 8", "Every weekday", "Every 30 minutes") into next execution timestamps.
+   - `ProactiveTaskRegistry` enables dynamic task registration for Memory, Predictive Intelligence, Learning, Self-Optimization, Vision, and AI Provider tasks.
+   - `PersistentSchedulerEngine` executes tasks in a non-blocking background `asyncio` loop with overlap prevention, timeout enforcement, exponential backoff retries, and FastAPI REST endpoints (`/api/scheduler/*`).

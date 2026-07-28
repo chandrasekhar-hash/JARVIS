@@ -31,13 +31,36 @@ class OllamaProvider(AIProvider):
             supports_long_context=True,
             supports_embeddings=False,
             average_latency=self._measured_latency,
-            priority=7
+            priority=5
         )
 
+    def get_installed_models(self) -> List[str]:
+        base = getattr(config, "OLLAMA_BASE_URL", "http://localhost:11434")
+        try:
+            with httpx.Client(base_url=base, timeout=3.0) as sync_client:
+                res = sync_client.get("/api/tags")
+                if res.status_code == 200:
+                    data = res.json()
+                    return [m.get("name") for m in data.get("models", []) if m.get("name")]
+        except Exception:
+            pass
+        return []
+
     def _ensure_config(self) -> None:
-        if not self.base_url or not self.model_name:
-            self.base_url = getattr(config, "OLLAMA_BASE_URL", "http://localhost:11434")
-            self.model_name = getattr(config, "OLLAMA_MODEL", "qwen3:8b")
+        self.base_url = getattr(config, "OLLAMA_BASE_URL", "http://localhost:11434")
+        cfg_model = getattr(config, "OLLAMA_MODEL", None)
+        
+        installed = self.get_installed_models()
+        
+        if cfg_model and str(cfg_model).strip():
+            self.model_name = str(cfg_model).strip()
+            # If configured model is not installed but we have installed models, fall back to first installed
+            if installed and not any(self.model_name == m or m.startswith(f"{self.model_name}:") for m in installed):
+                self.model_name = installed[0]
+        elif installed:
+            self.model_name = installed[0]
+        else:
+            self.model_name = "llama3.1:8b"
 
     def initialize(self) -> None:
         self._ensure_config()
@@ -49,7 +72,7 @@ class OllamaProvider(AIProvider):
     def health_check(self) -> bool:
         """
         Performs a health check by pinging /api/tags, checking if Ollama server
-        is reachable and if the configured model is installed. Also measures dynamic latency.
+        is reachable and updating dynamic model selection and latency.
         """
         self._ensure_config()
         t0 = time.time()
@@ -64,16 +87,11 @@ class OllamaProvider(AIProvider):
                     return False
                     
                 data = res.json()
-                models = [m.get("name") for m in data.get("models", [])]
+                models = [m.get("name") for m in data.get("models", []) if m.get("name")]
                 
-                # Check if model exists (exact match or tag match)
-                model_exists = any(self.model_name == m or m.startswith(f"{self.model_name}:") for m in models)
-                if not model_exists and models:
-                    log_structured(
-                        backend_log,
-                        "WARNING",
-                        f"[AI] Configured Ollama model '{self.model_name}' not found in local models: {models}."
-                    )
+                if models and not any(self.model_name == m or m.startswith(f"{self.model_name}:") for m in models):
+                    self.model_name = models[0]
+                    config.OLLAMA_MODEL = self.model_name
                 return True
         except Exception as e:
             self._measured_latency = 5.0

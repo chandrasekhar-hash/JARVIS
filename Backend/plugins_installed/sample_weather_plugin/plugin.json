@@ -1,0 +1,14 @@
+{
+  "id": "sample_weather_plugin",
+  "name": "Local Weather Assistant Plugin",
+  "version": "1.0.0",
+  "author": "J.A.R.V.I.S. Core Team",
+  "description": "Provides local weather telemetry and forecast lookups for J.A.R.V.I.S.",
+  "permissions": [
+    "network"
+  ],
+  "entry": "main.py",
+  "minimum_version": "1.0.0",
+  "category": "weather",
+  "enabled": true
+}

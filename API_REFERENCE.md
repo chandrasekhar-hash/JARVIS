@@ -90,3 +90,31 @@ This document describes the FastAPI REST endpoints and SSE streams exposed by th
   - Text Token: `data: {"type": "text", "content": "Open"}`
   - Audio URL segment: `data: {"type": "audio_url", "url": "/api/audio/uuid-123", "text": "Opening YouTube"}`
   - Errors: `data: {"type": "error", "content": "Details"}`
+
+---
+
+## 4. Local Plugin Framework REST Endpoints (Phase 6)
+
+### List Installed Plugins
+* **Endpoint:** `GET /api/plugins`
+* **Purpose:** Returns list of all locally discovered plugins, manifests, permissions, and tool statuses.
+
+### Plugin Details
+* **Endpoint:** `GET /api/plugins/{plugin_id}`
+* **Purpose:** Returns manifest metadata and health status for a specific plugin ID.
+
+### Enable Plugin
+* **Endpoint:** `POST /api/plugins/{plugin_id}/enable`
+* **Purpose:** Enables plugin, registers its tools in `ToolRegistry`, and sets state to running.
+
+### Disable Plugin
+* **Endpoint:** `POST /api/plugins/{plugin_id}/disable`
+* **Purpose:** Disables plugin, unregisters its tools from `ToolRegistry`, and sets state to disabled.
+
+### Reload Plugin
+* **Endpoint:** `POST /api/plugins/{plugin_id}/reload`
+* **Purpose:** Dynamically unloads and re-imports plugin entrypoint module from `Backend/plugins_installed/{id}/` without backend restart.
+
+### Plugin Health Check
+* **Endpoint:** `GET /api/plugins/{plugin_id}/health`
+* **Purpose:** Verifies entrypoint file existence, status integrity, and health boolean.

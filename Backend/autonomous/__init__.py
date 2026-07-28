@@ -40,6 +40,19 @@ from autonomous.workflow_manager import (
     WorkflowManager,
     FullWorkflowCheckpoint
 )
+from autonomous.scheduler_models import (
+    JobType,
+    JobStatus,
+    ScheduleTrigger,
+    ScheduledJob,
+    JobExecutionRecord,
+    SchedulerMetrics,
+    TaskDefinition
+)
+from autonomous.schedule_parser import parse_natural_language_schedule, compute_next_run
+from autonomous.scheduler_storage import scheduler_storage, SQLiteSchedulerStorage
+from autonomous.task_registry import task_registry, ProactiveTaskRegistry
+from autonomous.scheduler_engine import scheduler_engine, PersistentSchedulerEngine
 
 __all__ = [
     "autonomous_config",
@@ -84,4 +97,19 @@ __all__ = [
     "workflow_manager",
     "WorkflowManager",
     "FullWorkflowCheckpoint",
+    "JobType",
+    "JobStatus",
+    "ScheduleTrigger",
+    "ScheduledJob",
+    "JobExecutionRecord",
+    "SchedulerMetrics",
+    "TaskDefinition",
+    "parse_natural_language_schedule",
+    "compute_next_run",
+    "scheduler_storage",
+    "SQLiteSchedulerStorage",
+    "task_registry",
+    "ProactiveTaskRegistry",
+    "scheduler_engine",
+    "PersistentSchedulerEngine",
 ]

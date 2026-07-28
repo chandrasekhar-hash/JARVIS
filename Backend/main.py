@@ -30,6 +30,8 @@ app.include_router(autonomous_router)
 
 def shutdown_handler():
     print("DEBUG_LOG: [Shutdown] Shutdown/interruption signal received. Cleaning resources...")
+    from autonomous.scheduler_engine import scheduler_engine
+    scheduler_engine.stop()
     task_watchdog.cancel_all_tasks()
     from tools.locks import destructive_lock, _tool_locks
     try:
@@ -48,6 +50,12 @@ def startup_event():
     task_watchdog.start_watchdog()
     # Run startup verification (fails fast if keys or directories missing)
     verify_startup()
+    # Discover and load local dynamic plugins
+    from plugins.plugin_manager import plugin_manager
+    plugin_manager.discover_and_load_plugins()
+    # Start persistent autonomous scheduler engine
+    from autonomous.scheduler_engine import scheduler_engine
+    scheduler_engine.start()
     
     # Register shutdown signals / exit handlers for recovery
     try:
@@ -598,6 +606,94 @@ def update_settings(settings: SettingsRequest):
         os.environ["TTS_ENGINE"] = config.TTS_ENGINE
     return {"status": "success", "settings": get_settings()}
 
+class OllamaModelRequest(BaseModel):
+    model: str
+
+@app.get("/api/ollama/status")
+def get_ollama_status():
+    import config
+    from ai.providers.registry import provider_registry
+    try:
+        provider = provider_registry.get_provider("ollama")
+        is_online = provider.health_check()
+        models = provider.get_installed_models()
+        return {
+            "status": "online" if is_online else "offline",
+            "endpoint": getattr(config, "OLLAMA_BASE_URL", "http://localhost:11434"),
+            "models": models,
+            "current_model": provider.model_name
+        }
+    except Exception as e:
+        return {
+            "status": "offline",
+            "endpoint": getattr(config, "OLLAMA_BASE_URL", "http://localhost:11434"),
+            "models": [],
+            "current_model": None,
+            "error": str(e)
+        }
+
+@app.get("/api/ollama/models")
+def get_ollama_models():
+    from ai.providers.registry import provider_registry
+    try:
+        provider = provider_registry.get_provider("ollama")
+        models = provider.get_installed_models()
+        return {"models": models}
+    except Exception as e:
+        return {"models": [], "error": str(e)}
+
+@app.post("/api/ollama/model")
+def set_ollama_model(req: OllamaModelRequest):
+    import config
+    from ai.providers.registry import provider_registry
+    selected = req.model.strip()
+    config.OLLAMA_MODEL = selected
+    os.environ["OLLAMA_MODEL"] = selected
+    try:
+        provider = provider_registry.get_provider("ollama")
+        provider.model_name = selected
+    except Exception:
+        pass
+    return {"status": "success", "selected_model": selected}
+
+@app.get("/api/providers/status")
+def get_providers_status():
+    import config
+    from ai.providers.registry import provider_registry
+    providers = {}
+    registered = provider_registry.get_registered_providers()
+    
+    for name in registered.keys():
+        try:
+            p = provider_registry.get_provider(name)
+            meta = p.metadata
+            is_avail = True
+            if name == "ollama":
+                is_avail = p.health_check()
+            elif name in ["groq", "gemini", "openrouter", "cerebras"]:
+                is_avail = bool(getattr(p, "api_key", None))
+            
+            providers[name] = {
+                "name": meta.name,
+                "model": meta.model_name,
+                "priority": meta.priority,
+                "available": is_avail,
+                "supports_tools": meta.supports_tools,
+                "supports_streaming": meta.supported_streaming
+            }
+        except Exception as e:
+            providers[name] = {
+                "name": name.capitalize(),
+                "available": False,
+                "error": str(e)
+            }
+
+    return {
+        "active_provider": getattr(config, "ACTIVE_PROVIDER", "groq"),
+        "routing_mode": getattr(config, "ROUTING_MODE", "manual"),
+        "providers": providers
+    }
+
 # ==================================================
 # VISION REST API ENDPOINTS
 # ==================================================
@@ -710,6 +806,178 @@ async def get_memory_summary_api():
         "total_memories": summary.total_memories,
         "count_by_type": summary.count_by_type,
         "storage_bytes": summary.storage_bytes
+    }
+
+# ==================================================
+# SCHEDULER REST API ENDPOINTS (PHASE 7)
+# ==================================================
+
+class CreateJobRequest(BaseModel):
+    task_name: str
+    schedule_expression: str = "Every day at 08:00"
+    description: Optional[str] = None
+    params: Optional[Dict[str, Any]] = None
+
+class UpdateJobRequest(BaseModel):
+    schedule_expression: Optional[str] = None
+    description: Optional[str] = None
+    params: Optional[Dict[str, Any]] = None
+    enabled: Optional[bool] = None
+
+@app.get("/api/scheduler/status")
+def get_scheduler_status():
+    from autonomous.scheduler_engine import scheduler_engine
+    return scheduler_engine.get_status_report()
+
+@app.get("/api/scheduler/jobs")
+def get_scheduler_jobs():
+    from autonomous.scheduler_storage import scheduler_storage
+    jobs = scheduler_storage.get_all_jobs()
+    return {"jobs": [j.model_dump() for j in jobs]}
+
+@app.post("/api/scheduler/jobs")
+def create_scheduler_job(req: CreateJobRequest):
+    from autonomous.scheduler_models import ScheduledJob, JobStatus
+    from autonomous.schedule_parser import parse_natural_language_schedule, compute_next_run
+    from autonomous.scheduler_storage import scheduler_storage
+    from autonomous.task_registry import task_registry
+    
+    task_def = task_registry.get_task_definition(req.task_name)
+    desc = req.description or (task_def.description if task_def else f"Scheduled task {req.task_name}")
+    trigger = parse_natural_language_schedule(req.schedule_expression)
+    next_run = compute_next_run(trigger)
+    
+    job_id = f"job_{req.task_name}_{uuid.uuid4().hex[:6]}"
+    job = ScheduledJob(
+        job_id=job_id,
+        task_name=req.task_name,
+        description=desc,
+        trigger=trigger,
+        enabled=True,
+        next_run=next_run,
+        status=JobStatus.SCHEDULED,
+        params=req.params or {}
+    )
+    scheduler_storage.save_job(job)
+    return {"status": "success", "job": job.model_dump()}
+
+@app.put("/api/scheduler/jobs/{job_id}")
+def update_scheduler_job(job_id: str, req: UpdateJobRequest):
+    from autonomous.scheduler_storage import scheduler_storage
+    from autonomous.schedule_parser import parse_natural_language_schedule, compute_next_run
+    
+    job = scheduler_storage.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+        
+    if req.schedule_expression:
+        job.trigger = parse_natural_language_schedule(req.schedule_expression)
+        job.next_run = compute_next_run(job.trigger)
+    if req.description:
+        job.description = req.description
+    if req.params is not None:
+        job.params = req.params
+    if req.enabled is not None:
+        job.enabled = req.enabled
+        
+    scheduler_storage.save_job(job)
+    return {"status": "success", "job": job.model_dump()}
+
+@app.delete("/api/scheduler/jobs/{job_id}")
+def delete_scheduler_job(job_id: str):
+    from autonomous.scheduler_storage import scheduler_storage
+    success = scheduler_storage.delete_job(job_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    return {"status": "success", "deleted_job_id": job_id}
+
+@app.post("/api/scheduler/jobs/{job_id}/run")
+async def run_scheduler_job_now(job_id: str):
+    from autonomous.scheduler_engine import scheduler_engine
+    record = await scheduler_engine.execute_job(job_id, is_manual_trigger=True)
+    return {"status": "success", "execution": record.model_dump()}
+
+@app.post("/api/scheduler/jobs/{job_id}/pause")
+def pause_scheduler_job(job_id: str):
+    from autonomous.scheduler_engine import scheduler_engine
+    try:
+        job = scheduler_engine.pause_job(job_id)
+        return {"status": "success", "job": job.model_dump()}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.post("/api/scheduler/jobs/{job_id}/resume")
+def resume_scheduler_job(job_id: str):
+    from autonomous.scheduler_engine import scheduler_engine
+    try:
+        job = scheduler_engine.resume_job(job_id)
+        return {"status": "success", "job": job.model_dump()}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.get("/api/scheduler/jobs/{job_id}/history")
+def get_scheduler_job_history(job_id: str, limit: int = 50):
+    from autonomous.scheduler_storage import scheduler_storage
+    history = scheduler_storage.get_job_history(job_id, limit=limit)
+    return {"job_id": job_id, "history": [h.model_dump() for h in history]}
+
+@app.get("/api/scheduler/tasks")
+def get_registered_tasks():
+    from autonomous.task_registry import task_registry
+    tasks = task_registry.get_all_tasks()
+    return {"tasks": [t.model_dump() for t in tasks]}
+
+# ==================================================
+# PLUGIN REST API ENDPOINTS (PHASE 6)
+# ==================================================
+
+@app.get("/api/plugins")
+def get_all_plugins():
+    from plugins.plugin_manager import plugin_manager
+    plugins = plugin_manager.get_all_plugins()
+    return {"plugins": [p.model_dump() for p in plugins]}
+
+@app.get("/api/plugins/{plugin_id}")
+def get_plugin_details(plugin_id: str):
+    from plugins.plugin_manager import plugin_manager
+    state = plugin_manager.get_plugin(plugin_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Plugin '{plugin_id}' not found.")
+    return {"plugin": state.model_dump()}
+
+@app.post("/api/plugins/{plugin_id}/enable")
+def enable_plugin_api(plugin_id: str):
+    from plugins.plugin_manager import plugin_manager
+    success = plugin_manager.enable_plugin(plugin_id)
+    if not success:
+        raise HTTPException(status_code=400, detail=f"Failed to enable plugin '{plugin_id}'.")
+    return {"status": "success", "plugin_id": plugin_id, "action": "enabled"}
+
+@app.post("/api/plugins/{plugin_id}/disable")
+def disable_plugin_api(plugin_id: str):
+    from plugins.plugin_manager import plugin_manager
+    success = plugin_manager.disable_plugin(plugin_id)
+    if not success:
+        raise HTTPException(status_code=400, detail=f"Failed to disable plugin '{plugin_id}'.")
+    return {"status": "success", "plugin_id": plugin_id, "action": "disabled"}
+
+@app.post("/api/plugins/{plugin_id}/reload")
+def reload_plugin_api(plugin_id: str):
+    from plugins.plugin_manager import plugin_manager
+    success = plugin_manager.reload_plugin(plugin_id)
+    if not success:
+        raise HTTPException(status_code=400, detail=f"Failed to reload plugin '{plugin_id}'.")
+    return {"status": "success", "plugin_id": plugin_id, "action": "reloaded"}
+
+@app.get("/api/plugins/{plugin_id}/health")
+def check_plugin_health_api(plugin_id: str):
+    from plugins.plugin_manager import plugin_manager
+    is_healthy = plugin_manager.health_check(plugin_id)
+    state = plugin_manager.get_plugin(plugin_id)
+    return {
+        "plugin_id": plugin_id,
+        "health_ok": is_healthy,
+        "status": state.status if state else "unknown"
     }
 
 if __name__ == "__main__":

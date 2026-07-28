@@ -1,0 +1,14 @@
+{
+  "id": "sample_system_cleaner",
+  "name": "System Cache Cleaner Plugin",
+  "version": "1.0.0",
+  "author": "J.A.R.V.I.S. Core Team",
+  "description": "Purges temporary system files and rotates logs safely",
+  "permissions": [
+    "filesystem"
+  ],
+  "entry": "main.py",
+  "minimum_version": "1.0.0",
+  "category": "maintenance",
+  "enabled": true
+}

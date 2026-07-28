@@ -26,7 +26,7 @@ class OpenRouterProvider(AIProvider):
             supports_long_context=False,
             supports_embeddings=False,
             average_latency=2.2,
-            priority=6
+            priority=8
         )
 
     def _ensure_config(self) -> None:

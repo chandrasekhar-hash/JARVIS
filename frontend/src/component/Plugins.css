@@ -1,0 +1,263 @@
+.plugins-dashboard {
+  padding: 24px;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.plugins-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.plugins-title-container h2 {
+  margin: 0 0 6px 0;
+  font-size: 1.5rem;
+  color: #38bdf8;
+}
+
+.plugins-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.plugins-refresh-btn {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.plugins-refresh-btn:hover {
+  background: rgba(56, 189, 248, 0.25);
+}
+
+.plugins-error-banner {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.plugins-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.plugin-card {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+}
+
+.plugin-card.active {
+  border-left: 4px solid #10b981;
+}
+
+.plugin-card.disabled {
+  border-left: 4px solid #64748b;
+  opacity: 0.8;
+}
+
+.plugin-card.failed {
+  border-left: 4px solid #ef4444;
+}
+
+.plugin-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.plugin-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.plugin-name {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #f8fafc;
+}
+
+.plugin-version {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.plugin-status-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+}
+
+.plugin-status-badge.running, .plugin-status-badge.loaded {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.plugin-status-badge.disabled {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+}
+
+.plugin-status-badge.failed {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.plugin-description {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  margin: 0 0 14px 0;
+  line-height: 1.4;
+}
+
+.plugin-metadata {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.meta-row:last-child {
+  margin-bottom: 0;
+}
+
+.meta-label {
+  color: #64748b;
+}
+
+.meta-value {
+  color: #e2e8f0;
+}
+
+.badge-category {
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.code-font {
+  font-family: monospace;
+}
+
+.plugin-permissions, .plugin-tools {
+  margin-bottom: 12px;
+}
+
+.permissions-label, .tools-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.permissions-tags, .tools-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.permission-tag {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.tool-tag {
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: #c084fc;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.plugin-error-msg {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  font-size: 0.8rem;
+  padding: 8px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.plugin-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.plugin-btn {
+  flex: 1;
+  padding: 8px;
+  border-radius: 6px;
+  border: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.enable-btn {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.enable-btn:hover {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.disable-btn {
+  background: rgba(100, 116, 139, 0.2);
+  color: #cbd5e1;
+  border: 1px solid rgba(100, 116, 139, 0.4);
+}
+
+.disable-btn:hover {
+  background: rgba(100, 116, 139, 0.3);
+}
+
+.reload-btn {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.reload-btn:hover {
+  background: rgba(56, 189, 248, 0.25);
+}
