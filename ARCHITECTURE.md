@@ -63,16 +63,20 @@ graph TD
    - `ProactiveTaskRegistry` enables dynamic task registration for Memory, Predictive Intelligence, Learning, Self-Optimization, Vision, and AI Provider tasks.
    - `PersistentSchedulerEngine` executes tasks in a non-blocking background `asyncio` loop with overlap prevention, timeout enforcement, exponential backoff retries, and FastAPI REST endpoints (`/api/scheduler/*`).
 
-6. **Identity & Security Subsystem (`Backend/identity/`)**:
+6. **Identity & Security Subsystem (`Backend/identity/` & `Backend/security/`)**:
    - `LocalIdentityManager` auto-provisions and persists passwordless local user profile and Ed25519 device identity on first boot.
-   - `CryptoUtils` generates and manages Ed25519 elliptic-curve signing keypairs (`logs/device_ed25519_key.pem`) and SHA-256 fingerprints.
+   - OS Secure Credential Storage Subsystem (`Backend/security/keystore/`) supporting Apple Keychain, Windows DPAPI, Linux Secret Service, and AES-256-GCM encrypted fallback with random 256-bit master secret.
+   - High-level non-exportable cryptographic API (`sign_data`, `verify_signature`, `export_public_key_pem`, `rotate_keypair`, `health`).
+   - Transactional 7-step legacy migration with automatic rollback.
    - Device trust lifecycle manages trust states (`UNTRUSTED`, `PROVISIONAL`, `TRUSTED`, `REVOKED`).
    - SQLite persistence (`logs/jarvis_memory.db`) tracks `schema_version` migrations (`v1_identity_security`).
    - Decoupled `SessionManager` manages session issuance, access token validation, token refresh, and session revocation.
 
-7. **Cloud Backend Infrastructure (`Cloud/`)**:
+7. **Cloud Backend Infrastructure & Alembic Migration Architecture (`Cloud/`)**:
    - Standalone FastAPI API Gateway subsystem (`main.py` on Port 8001) providing multi-device cloud controls without affecting local offline execution.
-   - Database manager supporting PostgreSQL and SQLite dev fallback with `v1_cloud_backend` schema migration.
+   - **Alembic Database Migration System (`Cloud/alembic/`)**: Schema evolution is driven strictly by declarative SQLAlchemy 2.x ORM models (`Cloud/models/orm.py`) as single source of truth. Zero runtime DDL (`CREATE TABLE IF NOT EXISTS`).
+   - Pre-stamping legacy schema validator and non-automatic production startup verification (`Cloud/database/schema_verifier.py`).
+   - Multi-instance migration concurrency lock manager (`Cloud/database/migration_lock.py`).
    - Repositories for Users, Devices, Sessions, and Audit Logs.
    - Security Service executing Ed25519 challenge-response verification and issuing short-lived JWT Access Tokens & 30-day Refresh Tokens.
    - Sliding window Rate Limiter middleware (100 req/min) & Prometheus telemetry exporter.
