@@ -1,120 +1,134 @@
-# J.A.R.V.I.S. API Reference
+# J.A.R.V.I.S. API Reference Manual
 
-This document describes the FastAPI REST endpoints and SSE streams exposed by the JARVIS Core Backend.
-
----
-
-## 1. System Health & Observability Endpoints
-
-### Health Check
-* **Endpoint:** `GET /health`
-* **Purpose:** Minimal probe verifying the FastAPI server process is running.
-* **Response (200 OK):**
-  ```json
-  {"status": "healthy"}
-  ```
-
-### Diagnostics Readiness
-* **Endpoint:** `GET /ready`
-* **Purpose:** Performs diagnostic checks on external dependencies (Groq Connectivity, Edge TTS, registry tools, filesystem, and configuration).
-* **Response (200 OK or 503 Service Unavailable):**
-  ```json
-  {
-    "ready": true,
-    "details": {
-      "configuration": "valid",
-      "tool_registry": "active (13 tools)",
-      "filesystem": "accessible",
-      "groq_connectivity": "connected",
-      "edge_tts": "available"
-    }
-  }
-  ```
-
-### Performance Metrics
-* **Endpoint:** `GET /metrics`
-* **Purpose:** Exposes CPU, RAM, active task lists, and sliding metrics stats (Last 1m, 5m, Session, and Startup).
-* **Response (200 OK):**
-  ```json
-  {
-    "llm_latency": {
-      "1m": {"avg": 0.452, "p95": 0.452, "max": 0.452, "count": 1},
-      "5m": {"avg": 0.452, "p95": 0.452, "max": 0.452, "count": 1},
-      "session": {"avg": 0.452, "p95": 0.452, "max": 0.452, "count": 1}
-    },
-    "counts": {
-      "llm_requests": 1,
-      "tts_requests": 1,
-      "browser_operations": 0,
-      "file_operations": 0,
-      "active_conversations": 0,
-      "active_tool_executions": 0
-    },
-    "system": {
-      "cpu_percent": 12.5,
-      "ram_mb": 65.34
-    },
-    "active_tasks": []
-  }
-  ```
+Master specification of REST and WebSocket endpoints across the J.A.R.V.I.S. Platform.
 
 ---
 
-## 2. Conversational API
+## 1. Intent Classifier & Direct Tools
 
-### Voices List
-* **Endpoint:** `GET /api/voices`
-* **Purpose:** Populates the frontend configuration selectors.
-* **Response (200 OK):**
-  ```json
-  {
-    "engines": ["edge"],
-    "languages": ["English", "Hindi", "Hinglish", "Telugu", ...],
-    "genders": ["Female", "Male"]
-  }
-  ```
-
-### Chat SSE Stream
+### Direct Execution
 * **Endpoint:** `POST /api/chat`
-* **Purpose:** Receives user transcripts and pipes responses via Server-Sent Events (SSE) streaming text tokens and parallel TTS audio URLs.
-* **Payload:**
-  ```json
-  {
-    "message": "Open YouTube",
-    "voice": "female",
-    "language": "english",
-    "tts_language": ""
-  }
-  ```
-* **SSE Yield Formats:**
-  - Text Token: `data: {"type": "text", "content": "Open"}`
-  - Audio URL segment: `data: {"type": "audio_url", "url": "/api/audio/uuid-123", "text": "Opening YouTube"}`
-  - Errors: `data: {"type": "error", "content": "Details"}`
+* **Protocol:** HTTP REST / SSE Stream
+* **Purpose:** Process natural language commands through intent classification and tool execution.
 
 ---
 
-## 4. Local Plugin Framework REST Endpoints (Phase 6)
+## 2. Long-Term Memory API (Phase 4)
 
-### List Installed Plugins
-* **Endpoint:** `GET /api/plugins`
-* **Purpose:** Returns list of all locally discovered plugins, manifests, permissions, and tool statuses.
+### Store Observation
+* **Endpoint:** `POST /api/memory/store`
+* **Payload:** `{"content": "...", "category": "user_preference", "confidence": 0.95}`
+* **Purpose:** Stores an observation into the 3-Layer Memory Engine.
 
-### Plugin Details
-* **Endpoint:** `GET /api/plugins/{plugin_id}`
-* **Purpose:** Returns manifest metadata and health status for a specific plugin ID.
+### Query Memory
+* **Endpoint:** `POST /api/memory/query`
+* **Payload:** `{"query": "...", "top_k": 5}`
+* **Purpose:** Retrieves relevant memories based on vector similarity and 5-factor ranking.
 
-### Enable Plugin
-* **Endpoint:** `POST /api/plugins/{plugin_id}/enable`
-* **Purpose:** Enables plugin, registers its tools in `ToolRegistry`, and sets state to running.
+---
 
-### Disable Plugin
-* **Endpoint:** `POST /api/plugins/{plugin_id}/disable`
-* **Purpose:** Disables plugin, unregisters its tools from `ToolRegistry`, and sets state to disabled.
+## 3. Persistent Autonomous Scheduler API (Phase 7)
 
-### Reload Plugin
-* **Endpoint:** `POST /api/plugins/{plugin_id}/reload`
-* **Purpose:** Dynamically unloads and re-imports plugin entrypoint module from `Backend/plugins_installed/{id}/` without backend restart.
+### Create Scheduled Job
+* **Endpoint:** `POST /api/scheduler/jobs`
+* **Payload:** `{"name": "...", "expression": "Every morning at 8", "task_type": "memory_cleanup"}`
+* **Purpose:** Schedules an autonomous task.
 
-### Plugin Health Check
-* **Endpoint:** `GET /api/plugins/{plugin_id}/health`
-* **Purpose:** Verifies entrypoint file existence, status integrity, and health boolean.
+### List Jobs
+* **Endpoint:** `GET /api/scheduler/jobs`
+* **Purpose:** Returns list of active scheduled jobs.
+
+---
+
+## 4. Local Identity & Security API (Phase 8.1 - Port 8000)
+
+### Security Status
+* **Endpoint:** `GET /api/security/status`
+* **Purpose:** Returns local user identity and device trust state.
+
+### Device Trust Update
+* **Endpoint:** `POST /api/device/trust`
+* **Payload:** `{"device_id": "...", "trust_state": "TRUSTED"}`
+* **Purpose:** Modifies local device trust level.
+
+---
+
+## 5. Cloud Backend Infrastructure REST API (Phase 8.2 - Port 8001)
+
+### Authentication Challenge
+* **Endpoint:** `POST /api/v1/auth/challenge`
+* **Payload:** `{"device_id": "dev_..."}`
+* **Response:** `{"challenge": {"nonce": "...", "expires_at": ...}}`
+* **Purpose:** Initiates Ed25519 challenge-response sequence.
+
+### Device Authentication
+* **Endpoint:** `POST /api/v1/auth/device-auth`
+* **Payload:** `{"device_id": "dev_...", "nonce": "...", "signature_b64": "..."}`
+* **Response:** `{"tokens": {"access_token": "...", "refresh_token": "..."}}`
+* **Purpose:** Validates Ed25519 signature and returns JWT access and refresh tokens.
+
+### Token Refresh
+* **Endpoint:** `POST /api/v1/auth/token/refresh`
+* **Payload:** `{"refresh_token": "..."}`
+* **Response:** `{"tokens": {"access_token": "...", "refresh_token": "..."}}`
+* **Purpose:** Exchanges refresh token for new access token.
+
+### Token Revocation
+* **Endpoint:** `POST /api/v1/auth/token/revoke`
+* **Payload:** `{"session_id": "ses_..."}`
+* **Purpose:** Revokes a session token.
+
+### Device Registration
+* **Endpoint:** `POST /api/v1/devices/register`
+* **Payload:** `{"device_name": "...", "platform": "...", "architecture": "...", "os_version": "...", "public_key": "..."}`
+* **Purpose:** Registers a new device with Ed25519 public key.
+
+### Device List
+* **Endpoint:** `GET /api/v1/devices/list?user_id=usr_...`
+* **Purpose:** Lists all devices registered to a cloud user.
+
+### Update Device Trust
+* **Endpoint:** `PUT /api/v1/devices/{device_id}/trust`
+* **Payload:** `{"trust_state": "trusted" | "revoked"}`
+* **Purpose:** Updates cloud device trust state.
+
+### Cloud Observability & Probes
+* **Endpoint:** `GET /api/v1/health`: Cloud API Gateway health probe.
+* **Endpoint:** `GET /api/v1/ready`: Cloud readiness probe including WebSocket state counts, CRDT status, and stream queue depth.
+* **Endpoint:** `GET /api/v1/liveness`: Cloud liveness probe.
+* **Endpoint:** `GET /api/v1/security/status`: Detailed cloud security telemetry.
+* **Endpoint:** `GET /api/v1/metrics`: Prometheus metrics stream including sync connection, message rate, latency, and conflict counters.
+
+---
+
+## 6. Cloud Synchronization Gateway WebSocket API (Phase 8.3 - Port 8001)
+
+### WebSocket Real-Time Synchronization Endpoint
+* **Endpoint:** `ws://localhost:8001/ws/sync?token={JWT_ACCESS_TOKEN}`
+* **Protocol:** Bidirectional JSON envelopes (`SyncMessageEnvelope`) over WebSocket transport.
+* **Supported Message Types:** `AUTH`, `AUTH_OK`, `SYNC_REQUEST`, `SYNC_RESPONSE`, `DELTA`, `ACK`, `PING`, `PONG`, `DEVICE_JOIN`, `DEVICE_LEAVE`, `ERROR`.
+* **Reserved Future Message Types:** `PLUGIN_SYNC`, `VOICE_SYNC`, `FILE_SYNC`, `MODEL_SYNC`, `NOTIFICATION`.
+* **Payload Encryption:** AES-256-GCM application-layer payload encryption with threshold compression (>1 KB compressed with zlib before encryption).
+* **Connection Lifecycle States:** `CONNECTING` → `AUTHENTICATING` → `SYNCHRONIZING` → `ACTIVE` → `IDLE` → `RECONNECTING` → `DISCONNECTED`.
+
+---
+
+## 7. Client Synchronization Service API (Phase 8.4 - `Client/services/cloud_sync_service.py`)
+
+### `cloud_sync_service.initialize(user_id, device_id, access_token, refresh_token)`
+* **Purpose:** Initializes client synchronization manager, configures credentials, and starts `IntelligentSyncScheduler`.
+
+### `cloud_sync_service.sync_settings(settings_dict)`
+* **Purpose:** Dispatches settings change delta. Dispatches over WebSocket if online, or queues in `ReplayQueue` if offline.
+
+### `cloud_sync_service.sync_memory(memory_dict)`
+* **Purpose:** Dispatches long-term memory facts update delta with CRDT merge resolution.
+
+### `cloud_sync_service.sync_tasks(tasks_dict)`
+* **Purpose:** Dispatches autonomous task state update delta.
+
+### `cloud_sync_service.force_sync()`
+* **Purpose:** Triggers immediate manual sync attempt and drains pending offline operation queue.
+
+### `cloud_sync_service.get_status()`
+* **Purpose:** Returns status payload containing connection state (`CONNECTED`, `CONNECTING`, `OFFLINE`, `SYNCHRONIZING`, `ERROR`), quality score, pending offline change count, and telemetry metrics summary.

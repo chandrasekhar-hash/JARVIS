@@ -53,6 +53,11 @@ def startup_event():
     # Discover and load local dynamic plugins
     from plugins.plugin_manager import plugin_manager
     plugin_manager.discover_and_load_plugins()
+    # Initialize identity & session manager
+    from identity.identity_manager import identity_manager
+    from identity.session_manager import session_manager
+    identity_manager.initialize()
+    session_manager.initialize()
     # Start persistent autonomous scheduler engine
     from autonomous.scheduler_engine import scheduler_engine
     scheduler_engine.start()
@@ -979,6 +984,90 @@ def check_plugin_health_api(plugin_id: str):
         "health_ok": is_healthy,
         "status": state.status if state else "unknown"
     }
+
+# ==================================================
+# IDENTITY & SECURITY REST API ENDPOINTS (PHASE 8.1)
+# ==================================================
+
+@app.get("/api/identity")
+def get_identity():
+    from identity.identity_manager import identity_manager
+    user = identity_manager.get_user_profile()
+    return {"user_profile": user.model_dump()}
+
+@app.put("/api/identity")
+def update_identity(body: Dict[str, Any]):
+    from identity.identity_manager import identity_manager
+    display_name = body.get("display_name")
+    email = body.get("email")
+    avatar_url = body.get("avatar_url")
+    preferences = body.get("preferences")
+    updated = identity_manager.update_user_profile(
+        display_name=display_name,
+        email=email,
+        avatar_url=avatar_url,
+        preferences=preferences
+    )
+    return {"status": "success", "user_profile": updated.model_dump()}
+
+@app.get("/api/device")
+def get_device():
+    from identity.identity_manager import identity_manager
+    device = identity_manager.get_device_profile()
+    return {"device_profile": device.model_dump()}
+
+@app.put("/api/device/trust")
+def update_device_trust(body: Dict[str, Any]):
+    from identity.identity_manager import identity_manager
+    from identity.identity_models import DeviceTrustState
+    trust_str = body.get("trust_state", "trusted").lower()
+    try:
+        trust_state = DeviceTrustState(trust_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid trust_state '{trust_str}'. Allowed: untrusted, provisional, trusted, revoked.")
+    updated = identity_manager.update_device_trust_state(trust_state)
+    return {"status": "success", "device_profile": updated.model_dump()}
+
+@app.get("/api/security/status")
+def get_security_status_api():
+    from identity.identity_manager import identity_manager
+    status = identity_manager.get_security_status()
+    return {"security_status": status.model_dump()}
+
+@app.post("/api/session/issue")
+def issue_session_api():
+    from identity.identity_manager import identity_manager
+    from identity.session_manager import session_manager
+    user = identity_manager.get_user_profile()
+    device = identity_manager.get_device_profile()
+    token_pair, session = session_manager.issue_session(user.user_id, device.device_id)
+    return {
+        "status": "success",
+        "token_pair": token_pair.model_dump(),
+        "session": session.model_dump()
+    }
+
+@app.post("/api/session/logout")
+def logout_session_api(body: Dict[str, Any]):
+    from identity.session_manager import session_manager
+    session_id = body.get("session_id")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    success = session_manager.revoke_session(session_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
+    return {"status": "success", "session_id": session_id, "action": "revoked"}
+
+@app.post("/api/session/refresh")
+def refresh_session_api(body: Dict[str, Any]):
+    from identity.session_manager import session_manager
+    refresh_token = body.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=400, detail="refresh_token is required")
+    success, token_pair, err = session_manager.refresh_session(refresh_token)
+    if not success or not token_pair:
+        raise HTTPException(status_code=401, detail=err or "Token refresh failed")
+    return {"status": "success", "token_pair": token_pair.model_dump()}
 
 if __name__ == "__main__":
     import uvicorn
