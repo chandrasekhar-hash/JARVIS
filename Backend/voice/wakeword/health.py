@@ -1,6 +1,6 @@
 import time
 from typing import Dict, Any
-from Backend.voice.wakeword.metrics import wake_word_metrics, WakeWordMetrics
+from .metrics import wake_word_metrics, WakeWordMetrics
 
 
 class HealthMonitor:

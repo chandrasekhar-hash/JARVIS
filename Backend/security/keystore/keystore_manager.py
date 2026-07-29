@@ -5,15 +5,15 @@ from typing import Optional, Dict, Any
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 
-from Backend.security.keystore.base import BaseKeyStore
-from Backend.security.keystore.factory import KeystoreFactory
-from Backend.security.keystore.key_metadata import key_metadata_manager, KeyMetadataManager
+from .base import BaseKeyStore
+from .factory import KeystoreFactory
+from .key_metadata import key_metadata_manager, KeyMetadataManager
 
 # Ensure providers are loaded into factory
-import Backend.security.keystore.macos_keychain
-import Backend.security.keystore.windows_dpapi
-import Backend.security.keystore.linux_secret_service
-import Backend.security.keystore.fallback_file_keystore
+import security.keystore.macos_keychain
+import security.keystore.windows_dpapi
+import security.keystore.linux_secret_service
+import security.keystore.fallback_file_keystore
 
 logger = logging.getLogger("JARVIS_KeystoreManager")
 

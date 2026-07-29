@@ -3,21 +3,21 @@ import logging
 import threading
 from typing import Callable, List, Optional, Dict, Any
 
-from Backend.voice.wakeword.settings import wake_word_settings, WakeWordSettings
-from Backend.voice.wakeword.metrics import wake_word_metrics, WakeWordMetrics
-from Backend.voice.wakeword.audio_preprocessor import audio_preprocessor, AudioPreprocessor
-from Backend.voice.wakeword.noise_filter import noise_filter, NoiseFilter
-from Backend.voice.wakeword.keyword_manager import keyword_manager, KeywordManager
-from Backend.voice.wakeword.confidence import confidence_engine, ConfidenceEngine
-from Backend.voice.wakeword.detector import wake_word_detector, WakeWordDetector
-from Backend.voice.wakeword.listener import audio_listener, AudioListener
-from Backend.voice.wakeword.health import health_monitor, HealthMonitor
-from Backend.voice.wakeword.events import (
+from .settings import wake_word_settings, WakeWordSettings
+from .metrics import wake_word_metrics, WakeWordMetrics
+from .audio_preprocessor import audio_preprocessor, AudioPreprocessor
+from .noise_filter import noise_filter, NoiseFilter
+from .keyword_manager import keyword_manager, KeywordManager
+from .confidence import confidence_engine, ConfidenceEngine
+from .detector import wake_word_detector, WakeWordDetector
+from .listener import audio_listener, AudioListener
+from .health import health_monitor, HealthMonitor
+from .events import (
     WakeWordDetectedEvent, WakeWordRejectedEvent,
     EngineStartedEvent, EngineStoppedEvent,
     MicrophoneDisconnectedEvent, EngineRecoveredEvent
 )
-from Backend.voice.wakeword.exceptions import WakeWordError, MicrophoneDisconnectedError
+from .exceptions import WakeWordError, MicrophoneDisconnectedError
 
 logger = logging.getLogger("JARVIS_WakeWordEngine")
 

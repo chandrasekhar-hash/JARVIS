@@ -1,7 +1,7 @@
 import numpy as np
 import logging
 from typing import Tuple
-from Backend.voice.wakeword.utils import pcm_to_float32, float32_to_pcm, calculate_rms
+from .utils import pcm_to_float32, float32_to_pcm, calculate_rms
 
 logger = logging.getLogger("JARVIS_AudioPreprocessor")
 

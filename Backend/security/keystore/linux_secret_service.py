@@ -2,8 +2,8 @@ import logging
 from typing import Optional
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
-from Backend.security.keystore.base import BaseKeyStore
-from Backend.security.keystore.factory import KeystoreFactory
+from .base import BaseKeyStore
+from .factory import KeystoreFactory
 
 logger = logging.getLogger("JARVIS_LinuxSecretServiceKeyStore")
 

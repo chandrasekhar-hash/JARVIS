@@ -1,4 +1,11 @@
-from conversation.models import (
+"""
+J.A.R.V.I.S. Phase V1.3 Conversation Engine Subsystem Package.
+"""
+from .models import (
+    TurnState,
+    IntentType,
+    IntentResult,
+    ConversationTurn,
     ConversationSession,
     Topic,
     TopicTransition,
@@ -9,23 +16,36 @@ from conversation.models import (
     ContinuityValidation,
     ConversationResult,
 )
-from conversation.interfaces import (
+from .interfaces import (
     ISessionManager,
     ITopicManager,
     IContextTracker,
     IContinuityValidator,
     IConversationContinuityEngine,
 )
-from conversation.session_manager import SessionManager
-from conversation.topic_manager import TopicManager
-from conversation.context_tracker import ContextTracker
-from conversation.continuity_validator import ContinuityValidator
-from conversation.engine import (
-    ConversationContinuityEngine,
-    conversation_continuity_engine,
+from .session_manager import SessionManager
+from .topic_manager import TopicManager
+from .context_tracker import ContextTracker
+from .continuity_validator import ContinuityValidator
+from .state_machine import ConversationStateMachine, ConversationStateEnum
+from .intent_processor import IntentProcessor
+from .response_provider import (
+    IResponseProvider,
+    LocalResponseProvider,
+    OpenAIResponseProvider,
+    GroqResponseProvider,
+    GeminiResponseProvider,
+    MockResponseProvider,
+    ResponseProviderFactory,
 )
+from .metrics import ConversationMetrics, conversation_metrics
+from .engine import ConversationContinuityEngine, conversation_engine
 
 __all__ = [
+    "TurnState",
+    "IntentType",
+    "IntentResult",
+    "ConversationTurn",
     "ConversationSession",
     "Topic",
     "TopicTransition",
@@ -44,6 +64,18 @@ __all__ = [
     "TopicManager",
     "ContextTracker",
     "ContinuityValidator",
+    "ConversationStateMachine",
+    "ConversationStateEnum",
+    "IntentProcessor",
+    "IResponseProvider",
+    "LocalResponseProvider",
+    "OpenAIResponseProvider",
+    "GroqResponseProvider",
+    "GeminiResponseProvider",
+    "MockResponseProvider",
+    "ResponseProviderFactory",
+    "ConversationMetrics",
+    "conversation_metrics",
     "ConversationContinuityEngine",
-    "conversation_continuity_engine",
+    "conversation_engine",
 ]

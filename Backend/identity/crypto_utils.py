@@ -6,7 +6,7 @@ from typing import Tuple, Any
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 from tools.telemetry import log_structured, backend_log
-from Backend.security.keystore.keystore_manager import keystore_manager
+from security.keystore.keystore_manager import keystore_manager
 
 class CryptoUtils:
     """

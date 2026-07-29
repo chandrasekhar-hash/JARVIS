@@ -1,7 +1,58 @@
+"""
+Data models and data structures for J.A.R.V.I.S. Phase V1.3 Conversation Engine.
+Includes session models, topic transitions, reference resolutions, conversation turns,
+state definitions, summaries, continuity metrics, and results.
+"""
 import time
 import uuid
+from enum import Enum
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field, ConfigDict
+
+
+class TurnState(str, Enum):
+    """Execution state of an individual conversation turn."""
+    STARTED = "STARTED"
+    THINKING = "THINKING"
+    RESPONDING = "RESPONDING"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+    ERROR = "ERROR"
+
+
+class IntentType(str, Enum):
+    """Classified intent of a user conversation turn."""
+    QUESTION = "QUESTION"
+    COMMAND = "COMMAND"
+    FOLLOW_UP = "FOLLOW_UP"
+    CLARIFICATION = "CLARIFICATION"
+    CONTINUATION = "CONTINUATION"
+
+
+class IntentResult(BaseModel):
+    """Output from intent classification."""
+    model_config = ConfigDict(frozen=True)
+
+    intent: IntentType = IntentType.QUESTION
+    confidence: float = Field(default=0.85, ge=0.0, le=1.0)
+    entities: Dict[str, Any] = Field(default_factory=dict)
+    reason: str = Field(default="keyword_heuristic")
+
+
+class ConversationTurn(BaseModel):
+    """Represents an individual atomic turn within a conversation session."""
+    model_config = ConfigDict(frozen=False)
+
+    turn_id: str = Field(default_factory=lambda: f"trn_{uuid.uuid4().hex[:12]}")
+    session_id: str = Field(min_length=1)
+    parent_turn_id: Optional[str] = None
+    created_at: float = Field(default_factory=time.time)
+    user_text: str = Field(min_length=1)
+    assistant_response: Optional[str] = None
+    intent: Optional[IntentResult] = None
+    state: TurnState = TurnState.STARTED
+    response_time_ms: float = Field(default=0.0, ge=0.0)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
 class ConversationSession(BaseModel):
@@ -53,6 +104,7 @@ class ConversationState(BaseModel):
     last_turn_text: Optional[str] = None
     last_target_object: Optional[str] = None
     turn_count: int = Field(default=0, ge=0)
+    history: List[ConversationTurn] = Field(default_factory=list)
     updated_at: float = Field(default_factory=time.time)
 
 
@@ -93,6 +145,8 @@ class ConversationResult(BaseModel):
     success: bool
     session: Optional[ConversationSession] = None
     state: Optional[ConversationState] = None
+    current_turn: Optional[ConversationTurn] = None
+    assistant_response: Optional[str] = None
     resolved_references: List[ConversationReference] = Field(default_factory=list)
     summary: Optional[ConversationSummary] = None
     validation: Optional[ContinuityValidation] = None

@@ -2,9 +2,9 @@ import time
 import numpy as np
 import logging
 from typing import Optional, Dict, Any, Tuple
-from Backend.voice.wakeword.utils import calculate_rms, compute_spectral_energy
-from Backend.voice.wakeword.keyword_manager import keyword_manager, KeywordManager
-from Backend.voice.wakeword.confidence import confidence_engine, ConfidenceEngine
+from .utils import calculate_rms, compute_spectral_energy
+from .keyword_manager import keyword_manager, KeywordManager
+from .confidence import confidence_engine, ConfidenceEngine
 
 logger = logging.getLogger("JARVIS_WakeWordDetector")
 

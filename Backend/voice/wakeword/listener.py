@@ -3,8 +3,8 @@ import numpy as np
 import logging
 import threading
 from typing import Callable, Optional
-from Backend.voice.wakeword.settings import wake_word_settings, WakeWordSettings
-from Backend.voice.wakeword.exceptions import MicrophoneDisconnectedError
+from .settings import wake_word_settings, WakeWordSettings
+from .exceptions import MicrophoneDisconnectedError
 
 logger = logging.getLogger("JARVIS_AudioListener")
 

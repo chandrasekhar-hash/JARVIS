@@ -1,7 +1,7 @@
 import sys
 import logging
 from typing import Dict, Type, Optional
-from Backend.security.keystore.base import BaseKeyStore
+from .base import BaseKeyStore
 
 logger = logging.getLogger("JARVIS_KeystoreFactory")
 
