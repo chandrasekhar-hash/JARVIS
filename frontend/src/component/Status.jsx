@@ -122,6 +122,7 @@ export default function Status() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDragging, dragStart]);
 
   // Generate positioning style

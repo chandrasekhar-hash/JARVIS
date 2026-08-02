@@ -5,7 +5,7 @@ class EdgeTTSEngine(BaseTTSEngine):
     # Mapping of languages and genders to MS Edge/Azure neural voices
     VOICE_MAP = {
         "english": {
-            "female": "en-US-JennyNeural",
+            "female": "en-GB-SoniaNeural",
             "male": "en-US-GuyNeural"
         },
         "hindi": {
@@ -55,21 +55,21 @@ class EdgeTTSEngine(BaseTTSEngine):
         }
     }
 
-    async def synthesize(self, text: str, voice: str, language: str) -> bytes:
-        # Resolve voice gender and language (lowercase for robustness)
+    async def synthesize(self, text: str, voice: str, language: str, rate: str = "-8%", pitch: str = "-2Hz") -> bytes:
         lang_key = language.lower().strip()
-        gender_key = voice.lower().strip()
+        gender_key = voice.strip()
         
-        # Check if language is supported, default to english if not found
-        if lang_key not in self.VOICE_MAP:
-            lang_key = "english"
-            
-        # Get voice name, default to female if invalid gender
-        voice_gender_map = self.VOICE_MAP.get(lang_key, self.VOICE_MAP["english"])
-        voice_name = voice_gender_map.get(gender_key, voice_gender_map["female"])
+        # If explicit neural voice identifier is provided (e.g. en-GB-SoniaNeural), use directly
+        if "Neural" in gender_key or "-" in gender_key:
+            voice_name = gender_key
+        else:
+            if lang_key not in self.VOICE_MAP:
+                lang_key = "english"
+            voice_gender_map = self.VOICE_MAP.get(lang_key, self.VOICE_MAP["english"])
+            voice_name = voice_gender_map.get(gender_key.lower(), voice_gender_map["female"])
         
-        # Synthesize audio using edge-tts
-        communicate = edge_tts.Communicate(text, voice_name)
+        # Synthesize audio using edge-tts with rate and pitch settings
+        communicate = edge_tts.Communicate(text, voice_name, rate=rate, pitch=pitch)
         audio_data = b""
         
         async for chunk in communicate.stream():

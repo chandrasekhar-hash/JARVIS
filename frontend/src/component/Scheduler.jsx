@@ -51,6 +51,7 @@ export default function Scheduler() {
     fetchSchedulerData();
     const timer = setInterval(fetchSchedulerData, 10000);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCreateJob = async (e) => {

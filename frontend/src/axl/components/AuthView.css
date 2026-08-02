@@ -1,0 +1,833 @@
+/* FULL-SCREEN WELCOME VIDEO OVERLAY (PHASE 6.1) */
+
+.welcome-video-fullscreen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #000000;
+  z-index: 999999;
+  opacity: 1;
+  transition: opacity 0.4s ease-in-out;
+}
+
+.welcome-video-fullscreen-overlay.fade-out-overlay {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* PHASE 9 — FULL-SCREEN VIDEO TO LEFT PANEL CONTRACTION OVERLAY */
+
+.welcome-video-contracting-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 99999;
+  overflow: hidden;
+  pointer-events: auto;
+  background: #000000;
+  transition: width 1000ms cubic-bezier(0.4, 0, 0.2, 1), opacity 1000ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.welcome-video-contracting-overlay.contracting-to-left {
+  width: 50vw;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 839px) {
+  .welcome-video-contracting-overlay.contracting-to-left {
+    width: 100vw;
+    height: 180px;
+    opacity: 0;
+  }
+}
+
+.auth-panel-right-entering {
+  animation: slideInRightPanel 1000ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes slideInRightPanel {
+  0% {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.welcome-fullscreen-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* INITIALIZE SCREEN OVERLAY (PHASE 6.3 CROSS-BROWSER AUDIO UNLOCK) */
+.welcome-init-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: #000000;
+  z-index: 10;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.8s ease-in-out;
+}
+
+.welcome-init-overlay.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* MINIMAL SKIP BUTTON */
+.welcome-skip-btn {
+  position: absolute;
+  bottom: 30px;
+  right: 35px;
+  z-index: 100;
+  pointer-events: auto;
+  font-family: 'Orbitron', -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #00ffe1;
+  background: rgba(0, 20, 40, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 255, 225, 0.35);
+  border-radius: 4px;
+  padding: 8px 18px;
+  letter-spacing: 2.5px;
+  cursor: pointer;
+  outline: none;
+  box-shadow: 0 0 14px rgba(0, 255, 225, 0.18);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, color 0.25s ease;
+  user-select: none;
+}
+
+.welcome-skip-btn:hover {
+  background-color: rgba(0, 255, 225, 0.12);
+  border-color: #00ffe1;
+  box-shadow: 0 0 20px rgba(0, 255, 225, 0.35);
+  color: #ffffff;
+}
+
+.welcome-skip-btn .btn-arrow {
+  width: 14px;
+  height: 14px;
+  stroke: #00ffe1;
+  transition: transform 0.2s ease, stroke 0.2s ease;
+}
+
+.welcome-skip-btn:hover .btn-arrow {
+  transform: translateX(3px);
+  stroke: #ffffff;
+}
+
+.welcome-init-title {
+  font-family: 'Orbitron', -apple-system, sans-serif;
+  font-size: 52px;
+  font-weight: 700;
+  color: #00ffe1;
+  letter-spacing: 16px;
+  margin-bottom: 36px;
+  text-shadow: 0 0 24px rgba(0, 255, 225, 0.45);
+  user-select: none;
+}
+
+.welcome-init-btn {
+  font-family: 'Orbitron', -apple-system, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #00ffe1;
+  background: rgba(0, 20, 40, 0.6);
+  border: 1px solid rgba(0, 255, 225, 0.5);
+  border-radius: 4px;
+  padding: 14px 46px;
+  letter-spacing: 7px;
+  cursor: pointer;
+  outline: none;
+  pointer-events: auto;
+  position: relative;
+  z-index: 20;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, color 0.25s ease, background-color 0.25s ease, text-shadow 0.25s ease;
+  box-shadow: 0 0 18px rgba(0, 255, 225, 0.2);
+  user-select: none;
+  transform: none;
+}
+
+.welcome-init-btn:hover {
+  background-color: rgba(0, 255, 225, 0.12);
+  border-color: #00ffe1;
+  box-shadow: 0 0 26px rgba(0, 255, 225, 0.40);
+  text-shadow: 0 0 10px rgba(0, 255, 225, 0.7);
+  transform: none;
+}
+
+.welcome-init-btn:active {
+  transform: none;
+}
+
+.welcome-init-subtitle {
+  font-family: 'Orbitron', -apple-system, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(0, 255, 225, 0.45);
+  letter-spacing: 7px;
+  margin-top: 32px;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.auth-viewport-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  background-color: #020712;
+  z-index: 9998;
+  font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #00ffe1;
+}
+
+/* ==========================================================================
+   LEFT PANEL — LOOPING JARVIS VIDEO (FROZEN)
+   ========================================================================== */
+
+.auth-panel-left {
+  width: 50%;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(circle at center, #001433 0%, #020712 100%);
+  border-right: 1px solid rgba(0, 255, 225, 0.12);
+  box-sizing: border-box;
+}
+
+.left-panel-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+}
+
+/* ==========================================================================
+   RIGHT PANEL — INTEGRATED AUTHENTICATION UI
+   ========================================================================== */
+
+.auth-panel-right {
+  width: 50%;
+  height: 100vh;
+  background: radial-gradient(circle at center, #000c1f 0%, #020712 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.auth-content-box {
+  width: min(440px, 80%);
+  display: flex;
+  flex-direction: column;
+}
+
+/* 1. BRAND HEADER (FROZEN) */
+
+.auth-brand-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.brand-name {
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: 7px;
+  color: #00ffe1;
+  margin: 0 0 8px 0;
+  text-shadow: 0 0 20px rgba(0, 255, 225, 0.4);
+}
+
+.brand-subtitle-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.brand-line {
+  height: 1px;
+  width: 32px;
+  background: rgba(0, 132, 255, 0.35);
+}
+
+.brand-subtitle {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 3.5px;
+  color: #0084ff;
+  text-transform: uppercase;
+}
+
+/* FORM SWITCH ANIMATION */
+
+.auth-form-animated-wrapper {
+  animation: fadeInForm 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeInForm {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 2. SECTION HEADER */
+
+.auth-section-header {
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.login-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 3px;
+  color: #ffffff;
+  margin: 0 0 6px 0;
+}
+
+.login-desc {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+/* LOCAL VALIDATION / SUCCESS BANNER */
+
+.auth-success-banner {
+  color: #00ffe1;
+  font-size: 0.8rem;
+  text-align: center;
+  margin-bottom: 12px;
+  background: rgba(0, 255, 225, 0.1);
+  border: 1px solid rgba(0, 255, 225, 0.35);
+  border-radius: 8px;
+  padding: 8px 12px;
+  letter-spacing: 0.5px;
+  animation: fadeInForm 150ms ease-out;
+}
+
+.auth-validation-error {
+  color: #ff4d6d;
+  font-size: 0.78rem;
+  text-align: center;
+  margin-bottom: 12px;
+  background: rgba(255, 77, 109, 0.1);
+  border: 1px solid rgba(255, 77, 109, 0.35);
+  border-radius: 8px;
+  padding: 6px 12px;
+  letter-spacing: 0.5px;
+  animation: fadeInForm 150ms ease-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.auth-error-retry-btn {
+  background: rgba(255, 77, 109, 0.2);
+  border: 1px solid rgba(255, 77, 109, 0.6);
+  color: #ffffff;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.auth-error-retry-btn:hover {
+  background: rgba(255, 77, 109, 0.4);
+  border-color: #ff4d6d;
+}
+
+/* 3. INPUT FIELDS */
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group {
+  margin-bottom: 18px;
+}
+
+.form-group-dense {
+  margin-bottom: 10px;
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon-left {
+  position: absolute;
+  left: 16px;
+  width: 18px;
+  height: 18px;
+  color: rgba(0, 255, 225, 0.7);
+  pointer-events: none;
+}
+
+.input-wrapper input {
+  width: 100%;
+  height: 48px;
+  background: rgba(0, 20, 51, 0.5);
+  border: 1px solid rgba(0, 132, 255, 0.35);
+  border-radius: 12px;
+  padding: 0 44px;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.form-group-dense .input-wrapper input {
+  height: 42px;
+}
+
+.input-wrapper input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.input-wrapper input:focus {
+  border-color: #00ffe1;
+  box-shadow: 0 0 16px rgba(0, 255, 225, 0.25);
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 14px;
+  background: none;
+  border: none;
+  padding: 4px;
+  color: rgba(0, 255, 225, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+  transition: color 0.2s ease;
+}
+
+.password-toggle-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.password-toggle-btn:hover {
+  color: #00ffe1;
+}
+
+/* REAL-TIME PASSWORD REQUIREMENTS BOX */
+
+.password-requirements-box {
+  margin: -2px 0 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.req-header {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.5px;
+}
+
+.req-items-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 0.72rem;
+}
+
+.req-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0.3px;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+.req-tag.invalid {
+  color: rgba(255, 77, 109, 0.85);
+}
+
+.req-tag.valid {
+  color: #00ffe1;
+  text-shadow: 0 0 6px rgba(0, 255, 225, 0.4);
+}
+
+/* 4. REMEMBER ME & FORGOT PASSWORD */
+
+.form-controls-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  font-size: 0.82rem;
+}
+
+.remember-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.remember-checkbox-label input[type="checkbox"] {
+  display: none;
+}
+
+.custom-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(0, 132, 255, 0.5);
+  border-radius: 4px;
+  background: rgba(0, 20, 51, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.remember-checkbox-label input[type="checkbox"]:checked + .custom-checkbox {
+  background: #00ffe1;
+  border-color: #00ffe1;
+  box-shadow: 0 0 8px rgba(0, 255, 225, 0.4);
+}
+
+.remember-checkbox-label input[type="checkbox"]:checked + .custom-checkbox::after {
+  content: '';
+  width: 4px;
+  height: 8px;
+  border: solid #001433;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  margin-bottom: 2px;
+}
+
+.checkbox-text {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.forgot-password-link {
+  background: none;
+  border: none;
+  color: rgba(0, 255, 225, 0.8);
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+.forgot-password-link:hover {
+  color: #00ffe1;
+  text-shadow: 0 0 8px rgba(0, 255, 225, 0.4);
+}
+
+/* 5. BUTTONS */
+
+.login-submit-btn {
+  width: 100%;
+  height: 48px;
+  background: linear-gradient(90deg, #0084ff 0%, #00ffe1 100%);
+  border: none;
+  border-radius: 12px;
+  color: #001433;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.reg-submit-btn {
+  height: 44px;
+  margin-top: 4px;
+}
+
+.btn-arrow {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.2s ease;
+}
+
+.login-submit-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 24px rgba(0, 255, 225, 0.45);
+  filter: brightness(1.08);
+}
+
+.login-submit-btn:hover .btn-arrow {
+  transform: translateX(3px);
+}
+
+.login-submit-btn:active {
+  transform: translateY(0);
+}
+
+/* 6. REGISTRATION FOOTER ROW */
+
+.register-footer-row {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 0.82rem;
+  animation: fadeInForm 150ms ease-out;
+}
+
+.register-prompt {
+  color: rgba(224, 242, 254, 0.6);
+  margin-right: 6px;
+}
+
+.register-link {
+  background: none;
+  border: none;
+  color: #00ffe1;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.2s ease;
+}
+
+.register-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* OTP INPUT BOXES */
+.otp-boxes-container {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.otp-digit-box {
+  width: 44px;
+  height: 48px;
+  background: rgba(10, 18, 30, 0.6);
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  border-radius: 8px;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #00ffe1;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.otp-digit-box:focus {
+  border-color: #00ffe1;
+  box-shadow: 0 0 10px rgba(0, 255, 225, 0.3);
+  background: rgba(10, 25, 45, 0.8);
+}
+
+.otp-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.resend-code-btn {
+  background: none;
+  border: none;
+  color: #00ffe1;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.85;
+  transition: opacity 0.2s ease;
+}
+
+.resend-code-btn:disabled {
+  color: #64748b;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.resend-code-btn:not(:disabled):hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.highlight-email {
+  color: #00ffe1;
+  font-weight: 600;
+}
+
+/* RECOVERY SUCCESS BOX */
+.recovery-success-box {
+  text-align: center;
+  padding: 20px 16px;
+  background: rgba(0, 255, 225, 0.05);
+  border: 1px solid rgba(0, 255, 225, 0.2);
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.recovery-success-box .success-icon {
+  width: 44px;
+  height: 44px;
+  color: #00ffe1;
+  margin-bottom: 10px;
+}
+
+.recovery-success-box .success-text {
+  color: #e0f2fe;
+  font-size: 0.9rem;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* DESKTOP MEDIA QUERY (>= 840px) */
+@media (min-width: 840px) {
+  .auth-viewport-container {
+    flex-direction: row;
+  }
+
+  .auth-panel-left {
+    width: 50%;
+    height: 100vh;
+  }
+
+  .auth-panel-right {
+    width: 50%;
+    height: 100vh;
+  }
+}
+
+/* TABLET & MOBILE (< 840px) */
+@media (max-width: 839px) {
+  .auth-viewport-container {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .auth-panel-left {
+    width: 100%;
+    height: 180px;
+    flex-shrink: 0;
+    border-right: none;
+    border-bottom: 1px solid rgba(0, 255, 225, 0.15);
+  }
+
+  .auth-panel-right {
+    width: 100%;
+    height: auto;
+    min-height: calc(100vh - 180px);
+    padding: 24px 16px;
+    align-items: flex-start;
+  }
+
+  .auth-content-box {
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+
+  .welcome-init-title {
+    font-size: clamp(34px, 8vw, 52px);
+  }
+
+  .otp-digit-box {
+    width: clamp(34px, 11vw, 44px);
+    height: 44px;
+    font-size: 1.1rem;
+  }
+}
+
+/* SMALL MOBILE (< 480px) */
+@media (max-width: 479px) {
+  .auth-panel-left {
+    height: 140px;
+  }
+
+  .auth-panel-right {
+    min-height: calc(100vh - 140px);
+    padding: 16px 12px;
+  }
+
+  .brand-name {
+    font-size: 2rem;
+    letter-spacing: 5px;
+  }
+
+  .login-title {
+    font-size: 1.1rem;
+  }
+
+  .welcome-init-subtitle {
+    font-size: 9px;
+    letter-spacing: 4px;
+  }
+
+  .welcome-skip-btn {
+    bottom: 20px;
+    right: 20px;
+    padding: 6px 14px;
+    font-size: 11px;
+  }
+}
+
+/* PREFERS REDUCED MOTION */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

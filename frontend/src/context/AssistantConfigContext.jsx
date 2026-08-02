@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components */
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AssistantConfigContext = createContext();
@@ -215,6 +216,7 @@ export function AssistantConfigProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAssistantConfig() {
   const context = useContext(AssistantConfigContext);
   if (!context) {

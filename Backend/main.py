@@ -23,9 +23,16 @@ from tools.startup import verify_startup
 from tools.telemetry import task_watchdog, telemetry_manager, log_structured, backend_log, request_id_var
 from tools.bridge import event_queue_var, bridge_manager
 from api.autonomous import router as autonomous_router
+from api.auth import router as auth_router
+from api.health import router as health_router
+from api.diagnostics import router as diagnostics_router
+from axl.boot_manager import system_boot_manager
 
 app = FastAPI(title="J.A.R.V.I.S. Core Backend API")
 app.include_router(autonomous_router)
+app.include_router(auth_router)
+app.include_router(health_router)
+app.include_router(diagnostics_router)
 
 
 def shutdown_handler():
@@ -45,22 +52,13 @@ def shutdown_handler():
     print("DEBUG_LOG: [Shutdown] Clean recovery completed.")
 
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
     # Start task watchdog
     task_watchdog.start_watchdog()
     # Run startup verification (fails fast if keys or directories missing)
     verify_startup()
-    # Discover and load local dynamic plugins
-    from plugins.plugin_manager import plugin_manager
-    plugin_manager.discover_and_load_plugins()
-    # Initialize identity & session manager
-    from identity.identity_manager import identity_manager
-    from identity.session_manager import session_manager
-    identity_manager.initialize()
-    session_manager.initialize()
-    # Start persistent autonomous scheduler engine
-    from autonomous.scheduler_engine import scheduler_engine
-    scheduler_engine.start()
+    # Initialize all backend services via SystemBootManager
+    await system_boot_manager.initialize_all()
     
     # Register shutdown signals / exit handlers for recovery
     try:

@@ -4,187 +4,220 @@ import Bob from './component/bob';
 import Terminal from './component/Terminal';
 import Status from './component/Status';
 import Widgets from './component/Widgets';
+import UserProfileView from './component/UserProfileView';
 import { AssistantConfigProvider } from './context/AssistantConfigContext';
+
+// Product 1.11 AXL Imports
+import { AXLErrorBoundary } from './axl/components/AXLErrorBoundary';
+import { AXLRouterProvider, useAXLRouter, ROUTE_STATES } from './axl/context/AXLRouterContext';
+import { AXLAuthProvider } from './axl/context/AXLAuthContext';
+import { AXLFeatureFlagProvider } from './axl/context/AXLFeatureFlagContext';
+import { AXLStartupProvider } from './axl/context/AXLStartupContext';
+import SplashScreen from './axl/components/SplashScreen';
+import AuthView from './axl/components/AuthView';
+import SetupWizard from './axl/components/SetupWizard';
+import MaintenanceView from './axl/components/MaintenanceView';
+import DiagnosticsView from './axl/components/DiagnosticsView';
+
 import './App.css';
 
-function App() {
-  // 1. Color State (Default: Hyper Cyan Theme, loads from storage if set)
-  const [blobColor, setBlobColor] = useState(() => {
-    const saved = localStorage.getItem('jarvis-blob-color');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return {
-      name: 'Hyper Cyan',
-      deep: '#001433',
-      mid: '#0084ff',
-      bright: '#00ffe1',
-      shell: '#0066ff'
-    };
-  });
-
-  // 2. Size State (Default: 240px, loads from storage if set)
-  const [blobSize, setBlobSize] = useState(() => {
-    const saved = localStorage.getItem('jarvis-blob-size');
-    if (saved) {
-      const val = parseInt(saved, 10);
-      if (!isNaN(val)) return val;
-    }
-    return 240;
-  });
-
-  // 3. Drag Settings State
-  const [isDraggable, setIsDraggable] = useState(false);
-  const [blobPosition, setBlobPosition] = useState(() => {
-    const saved = localStorage.getItem('jarvis-blob-position');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return null; // Calculated on mount inside bob.jsx
-  });
-
-  // 4. J.A.R.V.I.S Text Customizations
-  const [jarvisFont, setJarvisFont] = useState(() => {
-    return localStorage.getItem('jarvis-text-font') || "'Orbitron', sans-serif";
-  });
-
-  const [jarvisColor, setJarvisColor] = useState(() => {
-    return localStorage.getItem('jarvis-text-color') || '';
-  });
-
-  const [jarvisFontSize, setJarvisFontSize] = useState(() => {
-    const saved = localStorage.getItem('jarvis-text-size');
-    if (saved) {
-      const val = parseInt(saved, 10);
-      if (!isNaN(val)) return val;
-    }
-    return 24; // Default font size
-  });
-
-  const [jarvisTextPosition, setJarvisTextPosition] = useState(() => {
-    const saved = localStorage.getItem('jarvis-text-position');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return null; // Null means relatively attached to the blob
-  });
-
-  const [isTextDraggable, setIsTextDraggable] = useState(false);
-
-  // 5. Blob Audio Sensitivity (Default: 3.6, loads from storage if set)
-  const [blobSensitivity, setBlobSensitivity] = useState(() => {
-    const saved = localStorage.getItem('jarvis-blob-sensitivity');
-    if (saved) {
-      const val = parseFloat(saved);
-      if (!isNaN(val)) return val;
-    }
-    return 3.6;
-  });
-
-  // 6. Terminal Settings State
-  const [terminalSettings, setTerminalSettings] = useState(() => {
-    const saved = localStorage.getItem('jarvis-terminal-settings');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return {
-          width: 720,
-          height: 60,
-          borderRadius: 12,
-          bgOpacity: 0.85,
-          borderGlow: 0.45,
-          draggable: false,
-          position: null,
-          colorTheme: '#00ff66',
-          ...parsed
-        };
-      } catch (e) {}
-    }
-    return {
-      width: 720,
-      height: 60,
-      borderRadius: 12,
-      bgOpacity: 0.85,
-      borderGlow: 0.45,
-      draggable: false,
-      position: null,
-      colorTheme: '#00ff66'
-    };
-  });
-
+function MainDashboard({ 
+  blobColor, setBlobColor, 
+  blobSize, setBlobSize, 
+  isDraggable, setIsDraggable, 
+  blobPosition, setBlobPosition, 
+  jarvisFont, setJarvisFont, 
+  jarvisColor, setJarvisColor, 
+  jarvisFontSize, setJarvisFontSize, 
+  jarvisTextPosition, setJarvisTextPosition, 
+  isTextDraggable, setIsTextDraggable, 
+  blobSensitivity, setBlobSensitivity, 
+  terminalSettings, setTerminalSettings 
+}) {
   return (
-    <AssistantConfigProvider>
-      <div className="app-wrapper">
-        {/* Dynamic Cosmic Background Elements */}
-        <div className="cosmic-glow cosmic-glow-1"></div>
-        <div className="cosmic-glow cosmic-glow-2"></div>
+    <div className="app-wrapper">
+      {/* Dynamic Cosmic Background Elements */}
+      <div className="cosmic-glow cosmic-glow-1"></div>
+      <div className="cosmic-glow cosmic-glow-2"></div>
 
-        <Status />
-        <Widgets />
+      <Status />
+      <Widgets />
 
-        <Navbar 
+      <Navbar 
+        blobColor={blobColor}
+        setBlobColor={setBlobColor}
+        blobSize={blobSize}
+        setBlobSize={setBlobSize}
+        isDraggable={isDraggable}
+        setIsDraggable={setIsDraggable}
+        blobPosition={blobPosition}
+        setBlobPosition={setBlobPosition}
+        jarvisFont={jarvisFont}
+        setJarvisFont={setJarvisFont}
+        jarvisColor={jarvisColor}
+        setJarvisColor={setJarvisColor}
+        jarvisFontSize={jarvisFontSize}
+        setJarvisFontSize={setJarvisFontSize}
+        jarvisTextPosition={jarvisTextPosition}
+        setJarvisTextPosition={setJarvisTextPosition}
+        isTextDraggable={isTextDraggable}
+        setIsTextDraggable={setIsTextDraggable}
+        blobSensitivity={blobSensitivity}
+        setBlobSensitivity={setBlobSensitivity}
+        terminalSettings={terminalSettings}
+        setTerminalSettings={setTerminalSettings}
+      />
+
+      <main id="center" style={{ marginTop: '140px', padding: '0 24px' }}>
+        <Bob 
           blobColor={blobColor}
-          setBlobColor={setBlobColor}
           blobSize={blobSize}
-          setBlobSize={setBlobSize}
           isDraggable={isDraggable}
           setIsDraggable={setIsDraggable}
           blobPosition={blobPosition}
           setBlobPosition={setBlobPosition}
           jarvisFont={jarvisFont}
-          setJarvisFont={setJarvisFont}
           jarvisColor={jarvisColor}
-          setJarvisColor={setJarvisColor}
           jarvisFontSize={jarvisFontSize}
-          setJarvisFontSize={setJarvisFontSize}
           jarvisTextPosition={jarvisTextPosition}
           setJarvisTextPosition={setJarvisTextPosition}
           isTextDraggable={isTextDraggable}
           setIsTextDraggable={setIsTextDraggable}
           blobSensitivity={blobSensitivity}
-          setBlobSensitivity={setBlobSensitivity}
-          terminalSettings={terminalSettings}
-          setTerminalSettings={setTerminalSettings}
         />
+      </main>
 
-        <main id="center" style={{ marginTop: '140px', padding: '0 24px' }}>
-          <Bob 
-            blobColor={blobColor}
-            blobSize={blobSize}
-            isDraggable={isDraggable}
-            setIsDraggable={setIsDraggable}
-            blobPosition={blobPosition}
-            setBlobPosition={setBlobPosition}
-            jarvisFont={jarvisFont}
-            jarvisColor={jarvisColor}
-            jarvisFontSize={jarvisFontSize}
-            jarvisTextPosition={jarvisTextPosition}
-            setJarvisTextPosition={setJarvisTextPosition}
-            isTextDraggable={isTextDraggable}
-            setIsTextDraggable={setIsTextDraggable}
-            blobSensitivity={blobSensitivity}
-          />
-        </main>
+      <footer className="app-footer">
+        <div className="ticks"></div>
+      </footer>
 
-        <footer className="app-footer">
-          <div className="ticks"></div>
-        </footer>
-
-        {/* JARVIS Terminal — live speech recognition panel */}
-        <Terminal 
-          terminalSettings={terminalSettings}
-          setTerminalSettings={setTerminalSettings}
-        />
-      </div>
-    </AssistantConfigProvider>
+      {/* JARVIS Terminal — live speech recognition panel */}
+      <Terminal 
+        terminalSettings={terminalSettings}
+        setTerminalSettings={setTerminalSettings}
+      />
+    </div>
   );
 }
 
-export default App;
+function AppContent() {
+  const { currentRoute } = useAXLRouter();
 
+  // State initialization for UI preferences
+  const [blobColor, setBlobColor] = useState(() => {
+    const saved = localStorage.getItem('jarvis-blob-color');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return { name: 'Hyper Cyan', deep: '#001433', mid: '#0084ff', bright: '#00ffe1', shell: '#0066ff' };
+  });
+
+  const [blobSize, setBlobSize] = useState(() => {
+    const saved = localStorage.getItem('jarvis-blob-size');
+    if (saved) { const val = parseInt(saved, 10); if (!isNaN(val)) return val; }
+    return 240;
+  });
+
+  const [isDraggable, setIsDraggable] = useState(false);
+  const [blobPosition, setBlobPosition] = useState(() => {
+    const saved = localStorage.getItem('jarvis-blob-position');
+    if (saved) { try { return JSON.parse(saved); } catch (e) {} }
+    return null;
+  });
+
+  const [jarvisFont, setJarvisFont] = useState(() => localStorage.getItem('jarvis-text-font') || "'Orbitron', sans-serif");
+  const [jarvisColor, setJarvisColor] = useState(() => localStorage.getItem('jarvis-text-color') || '');
+  const [jarvisFontSize, setJarvisFontSize] = useState(() => {
+    const saved = localStorage.getItem('jarvis-text-size');
+    if (saved) { const val = parseInt(saved, 10); if (!isNaN(val)) return val; }
+    return 24;
+  });
+
+  const [jarvisTextPosition, setJarvisTextPosition] = useState(() => {
+    const saved = localStorage.getItem('jarvis-text-position');
+    if (saved) { try { return JSON.parse(saved); } catch (e) {} }
+    return null;
+  });
+
+  const [isTextDraggable, setIsTextDraggable] = useState(false);
+  const [blobSensitivity, setBlobSensitivity] = useState(() => {
+    const saved = localStorage.getItem('jarvis-blob-sensitivity');
+    if (saved) { const val = parseFloat(saved); if (!isNaN(val)) return val; }
+    return 3.6;
+  });
+
+  const [terminalSettings, setTerminalSettings] = useState(() => {
+    const saved = localStorage.getItem('jarvis-terminal-settings');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { width: 720, height: 60, borderRadius: 12, bgOpacity: 0.85, borderGlow: 0.45, draggable: false, position: null, colorTheme: '#00ff66', ...parsed };
+      } catch (e) {}
+    }
+    return { width: 720, height: 60, borderRadius: 12, bgOpacity: 0.85, borderGlow: 0.45, draggable: false, position: null, colorTheme: '#00ff66' };
+  });
+
+  switch (currentRoute) {
+    case ROUTE_STATES.BOOTING:
+      return <SplashScreen />;
+    case ROUTE_STATES.WIZARD:
+      return <SetupWizard />;
+    case ROUTE_STATES.UNAUTHENTICATED:
+      return <AuthView />;
+    case ROUTE_STATES.MAINTENANCE:
+      return <MaintenanceView />;
+    case ROUTE_STATES.DIAGNOSTICS_ERROR:
+      return <DiagnosticsView />;
+    case ROUTE_STATES.PROFILE:
+      return (
+        <UserProfileView 
+          blobColor={blobColor} setBlobColor={setBlobColor}
+          blobSize={blobSize} setBlobSize={setBlobSize}
+          isDraggable={isDraggable} setIsDraggable={setIsDraggable}
+          blobPosition={blobPosition} setBlobPosition={setBlobPosition}
+          jarvisFont={jarvisFont} setJarvisFont={setJarvisFont}
+          jarvisColor={jarvisColor} setJarvisColor={setJarvisColor}
+          jarvisFontSize={jarvisFontSize} setJarvisFontSize={setJarvisFontSize}
+          jarvisTextPosition={jarvisTextPosition} setJarvisTextPosition={setJarvisTextPosition}
+          isTextDraggable={isTextDraggable} setIsTextDraggable={setIsTextDraggable}
+          blobSensitivity={blobSensitivity} setBlobSensitivity={setBlobSensitivity}
+          terminalSettings={terminalSettings} setTerminalSettings={setTerminalSettings}
+        />
+      );
+    case ROUTE_STATES.AUTHENTICATED:
+    default:
+      return (
+        <MainDashboard 
+          blobColor={blobColor} setBlobColor={setBlobColor}
+          blobSize={blobSize} setBlobSize={setBlobSize}
+          isDraggable={isDraggable} setIsDraggable={setIsDraggable}
+          blobPosition={blobPosition} setBlobPosition={setBlobPosition}
+          jarvisFont={jarvisFont} setJarvisFont={setJarvisFont}
+          jarvisColor={jarvisColor} setJarvisColor={setJarvisColor}
+          jarvisFontSize={jarvisFontSize} setJarvisFontSize={setJarvisFontSize}
+          jarvisTextPosition={jarvisTextPosition} setJarvisTextPosition={setJarvisTextPosition}
+          isTextDraggable={isTextDraggable} setIsTextDraggable={setIsTextDraggable}
+          blobSensitivity={blobSensitivity} setBlobSensitivity={setBlobSensitivity}
+          terminalSettings={terminalSettings} setTerminalSettings={setTerminalSettings}
+        />
+      );
+  }
+}
+
+export default function App() {
+  return (
+    <AXLErrorBoundary>
+      <AssistantConfigProvider>
+        <AXLRouterProvider>
+          <AXLAuthProvider>
+            <AXLFeatureFlagProvider>
+              <AXLStartupProvider>
+                <AppContent />
+              </AXLStartupProvider>
+            </AXLFeatureFlagProvider>
+          </AXLAuthProvider>
+        </AXLRouterProvider>
+      </AssistantConfigProvider>
+    </AXLErrorBoundary>
+  );
+}

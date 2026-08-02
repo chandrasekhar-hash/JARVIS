@@ -242,6 +242,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       if (unlistenState) unlistenState();
       if (unlistenToken) unlistenToken();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
 
@@ -548,6 +549,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     return () => {
       controller.abort();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawLastFinalText, listeningLang, displayLang, wakeWordRequired, wakeWords, status]);
 
   useEffect(() => {
@@ -600,6 +602,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
       clearTimeout(timer);
       controller.abort();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawInterim, rawLastFinalText, listeningLang, displayLang, wakeWordRequired, wakeWords, status]);
 
   const handleToggleTerminal = (e) => {
@@ -1451,6 +1454,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
         recognitionRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOff, listeningLang, isMicPaused]);
 
   const hasCustomColor = terminalSettings.colorTheme && terminalSettings.colorTheme.startsWith('#');

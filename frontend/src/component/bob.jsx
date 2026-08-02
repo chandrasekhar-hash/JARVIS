@@ -679,7 +679,7 @@ export default function Bob({
     animate();
 
     // 8. AUTOMATIC MICROPHONE (handled dynamically in dedicated useEffect)
-    let cancelled = false;
+    let _cancelled = false;
 
     // 9. RESIZE
     const handleResize = () => {
@@ -721,7 +721,7 @@ export default function Bob({
 
     // 11. CLEANUP
     return () => {
-      cancelled = true;
+      _cancelled = true;
       cancelAnimationFrame(frameId);
       window.removeEventListener('resize', handleResize);
       resizeObserver.disconnect();

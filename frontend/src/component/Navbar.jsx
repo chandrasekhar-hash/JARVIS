@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAssistantConfig } from '../context/AssistantConfigContext';
+import { useAXLRouter, ROUTE_STATES } from '../axl/context/AXLRouterContext';
+import NavbarUserProfile from './NavbarUserProfile';
 import './Navbar.css';
 
 export default function Navbar({
@@ -46,6 +48,7 @@ export default function Navbar({
     voiceLanguage,
     updateVoiceLanguage
   } = useAssistantConfig();
+  const { currentRoute, navigateTo } = useAXLRouter();
   const [activeIndex, setActiveIndex] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -314,6 +317,9 @@ export default function Navbar({
   const handleLinkClick = (e, index) => {
     setActiveIndex(index);
     setMobileOpen(false);
+    if (currentRoute === ROUTE_STATES.PROFILE) {
+      navigateTo(ROUTE_STATES.AUTHENTICATED);
+    }
     // Smooth scroll for hash links
     const targetId = menuItems[index].path;
     if (targetId.startsWith('#') && targetId.length > 1) {
@@ -407,6 +413,9 @@ export default function Navbar({
             </svg>
           </button>
           
+          {/* USER PROFILE DROPDOWN MENU */}
+          <NavbarUserProfile />
+
           {/* Mobile hamburger menu toggle */}
           <button 
             className={`mobile-toggle ${mobileOpen ? 'open' : ''}`} 

@@ -1,0 +1,848 @@
+/* ═══════════════════════════════════════════════════════════════
+   JARVIS — 3D LIQUID GLASS FUTURISTIC USER PROFILE VIEW (100% FULLSCREEN)
+   ═══════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+/* ── Root Page Layout ────────────────────────────────────────── */
+.profile-root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  min-height: 100vh;
+  background: #02050f;
+  color: #c4ebff;
+  font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* ── Particle Canvas (Covers Entire Screen) ──────────────────── */
+.profile-particle-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ── Radial Glow Ambient Highlights ──────────────────────────── */
+.profile-glow-bg {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(160px);
+}
+.glow-left {
+  top: 10%;
+  left: -5%;
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, rgba(0, 220, 255, 0.18) 0%, transparent 70%);
+}
+.glow-right {
+  top: 5%;
+  right: -5%;
+  width: 750px;
+  height: 750px;
+  background: radial-gradient(circle, rgba(176, 38, 255, 0.18) 0%, transparent 70%);
+}
+
+/* ── 100% FULL SCREEN MAIN CONTAINER (NO MARGIN CAPS) ───────── */
+.profile-main-container {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  padding: 2rem 3.5rem 3rem;
+  box-sizing: border-box;
+  width: 100vw;
+  min-height: 100vh;
+  margin: 0;
+}
+
+.profile-top-bar {
+  width: 100%;
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 1.25rem;
+}
+
+.btn-back-console {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(0, 220, 255, 0.08);
+  border: 1px solid rgba(0, 220, 255, 0.4);
+  color: #00e5ff;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  padding: 0.65rem 1.4rem;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 18px rgba(0, 220, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.btn-back-console:hover {
+  background: rgba(0, 220, 255, 0.25);
+  border-color: #00ffff;
+  color: #ffffff;
+  box-shadow: 0 0 30px rgba(0, 240, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transform: translateX(-3px);
+}
+
+.profile-content-grid {
+  display: flex;
+  gap: 3rem;
+  width: 100%;
+  align-items: stretch;
+  justify-content: space-between;
+  flex: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   3D LIQUID GLASS SPECULAR EFFECTS
+   ═══════════════════════════════════════════════════════════════ */
+.3d-liquid-glass {
+  position: relative;
+  background: linear-gradient(145deg, rgba(8, 22, 45, 0.58) 0%, rgba(2, 10, 22, 0.78) 100%);
+  backdrop-filter: blur(25px) saturate(180%);
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  border: 1px solid rgba(0, 220, 255, 0.28);
+  border-radius: 22px;
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.8),
+    0 0 30px rgba(0, 200, 255, 0.12),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1.5px 0 rgba(176, 38, 255, 0.25);
+  overflow: hidden;
+}
+
+.glass-shine-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 100%);
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LEFT SIDEBAR PANEL
+   ═══════════════════════════════════════════════════════════════ */
+.profile-sidebar-panel {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-glass-card {
+  height: 100%;
+  padding: 1.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  box-sizing: border-box;
+}
+
+/* System ID Header */
+.sidebar-sys-id {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #00e5ff;
+  text-align: center;
+  padding-bottom: 0.5rem;
+  text-shadow: 0 0 15px rgba(0, 229, 255, 0.6);
+}
+
+/* Active Session Metrics Block */
+.sidebar-metrics-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.metrics-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.metrics-title {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #00e5ff;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+}
+
+.live-green-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #00ffaa;
+  box-shadow: 0 0 12px #00ffaa, 0 0 24px rgba(0, 255, 170, 0.5);
+  animation: pulse-green 2s ease-in-out infinite;
+}
+@keyframes pulse-green {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.7; }
+}
+
+.metrics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.metric-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+}
+
+.metric-label-group {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: rgba(0, 220, 255, 0.65);
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.metric-icon {
+  color: #00e5ff;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.5));
+}
+
+.metric-value {
+  color: #e0f4ff;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+}
+
+.status-online {
+  color: #00ffaa;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 10px rgba(0, 255, 170, 0.5);
+}
+
+/* 3D Liquid Quote Card */
+.3d-liquid-card {
+  margin-top: auto;
+  background: linear-gradient(135deg, rgba(123, 44, 191, 0.22) 0%, rgba(0, 150, 255, 0.12) 100%);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(176, 38, 255, 0.35);
+  border-radius: 16px;
+  padding: 1.4rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 0 20px rgba(176, 38, 255, 0.15);
+}
+
+.quote-icon {
+  font-size: 2.4rem;
+  line-height: 1;
+  color: rgba(0, 225, 255, 0.5);
+  font-family: Georgia, serif;
+}
+
+.quote-body {
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #e8f5ff;
+  font-style: italic;
+}
+
+.quote-author {
+  align-self: flex-end;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #00e5ff;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RIGHT MAIN PROFILE SECTION (STRETCHES FULL WIDTH)
+   ═══════════════════════════════════════════════════════════════ */
+.profile-main-section {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* Hero Avatar & Name Block */
+.profile-hero-block {
+  display: flex;
+  align-items: center;
+  gap: 2.4rem;
+  padding-bottom: 0.5rem;
+}
+
+/* 3D Glowing Avatar Ring */
+.avatar-ring-container {
+  position: relative;
+  width: 125px;
+  height: 125px;
+  flex-shrink: 0;
+}
+
+.3d-avatar-glow {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  padding: 4px;
+  background: linear-gradient(135deg, #00f0ff 0%, #b026ff 100%);
+  box-shadow:
+    0 0 35px rgba(0, 240, 255, 0.55),
+    0 0 70px rgba(176, 38, 255, 0.35),
+    inset 0 0 18px rgba(255, 255, 255, 0.4);
+  box-sizing: border-box;
+}
+
+.avatar-ring-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #031428 0%, #0a2448 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.8);
+}
+
+.avatar-initials-text {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 2.6rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 20px rgba(0, 240, 255, 0.8);
+  user-select: none;
+}
+
+.avatar-pencil-btn {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7b2cbf, #3a0ca3);
+  border: 2px solid #00f0ff;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.7);
+  transition: transform 0.25s ease;
+}
+.avatar-pencil-btn:hover {
+  transform: scale(1.15) rotate(15deg);
+}
+
+/* Bio Details */
+.hero-bio-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.bio-name-row,
+.bio-username-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.futuristic-font-glow {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 22px rgba(0, 240, 255, 0.45);
+}
+
+.bio-display-name {
+  margin: 0;
+}
+
+.bio-username {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #00e5ff;
+  text-shadow: 0 0 14px rgba(0, 229, 255, 0.55);
+}
+
+.bio-edit-btn {
+  background: rgba(0, 220, 255, 0.08);
+  border: 1px solid rgba(0, 220, 255, 0.3);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #00e5ff;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+.bio-edit-btn:hover {
+  background: rgba(0, 220, 255, 0.25);
+  color: #ffffff;
+  border-color: #00ffff;
+  box-shadow: 0 0 14px rgba(0, 255, 255, 0.6);
+}
+
+.bio-joined-date {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.88rem;
+  color: rgba(0, 220, 255, 0.68);
+  margin-top: 0.25rem;
+}
+
+/* Section Block */
+.profile-section-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.section-header-title {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #00e5ff;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+}
+
+/* 3D Liquid Bar Inputs */
+.input-rows-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.3d-liquid-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(6, 18, 38, 0.68) 0%, rgba(2, 10, 24, 0.78) 100%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 220, 255, 0.25);
+  border-radius: 16px;
+  padding: 0.95rem 1.6rem;
+  box-shadow:
+    0 10px 25px rgba(0, 0, 0, 0.5),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1.5px 0 rgba(176, 38, 255, 0.15);
+  transition: all 0.3s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+.3d-liquid-bar:hover,
+.3d-liquid-bar.active-editing {
+  border-color: rgba(0, 240, 255, 0.6);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.6),
+    0 0 22px rgba(0, 220, 255, 0.25),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.35);
+}
+.readonly-bar {
+  background: rgba(3, 10, 22, 0.58);
+  border-color: rgba(0, 220, 255, 0.15);
+}
+
+.field-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.field-icon {
+  color: #00e5ff;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.5));
+}
+.field-icon-text {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #00e5ff;
+  width: 18px;
+  text-align: center;
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+}
+
+.field-label-text {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(220, 240, 255, 0.9);
+}
+
+.field-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.field-text-input {
+  width: 100%;
+  max-width: 420px;
+  background: rgba(2, 8, 18, 0.85);
+  border: 1px solid rgba(0, 220, 255, 0.28);
+  border-radius: 12px;
+  padding: 0.6rem 1.1rem;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: #ffffff;
+  outline: none;
+  transition: all 0.25s ease;
+  box-sizing: border-box;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.field-text-input:focus {
+  border-color: #00f0ff;
+  background: rgba(0, 220, 255, 0.14);
+  box-shadow: 0 0 18px rgba(0, 240, 255, 0.4), inset 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.field-readonly-text {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.95rem;
+  color: rgba(200, 230, 255, 0.7);
+  font-weight: 500;
+}
+
+.lock-icon {
+  color: rgba(0, 220, 255, 0.55);
+}
+
+.check-circle-btn {
+  background: rgba(0, 220, 255, 0.12);
+  border: 1px solid rgba(0, 220, 255, 0.4);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 220, 255, 0.65);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+.check-circle-btn.dirty,
+.check-circle-btn:hover {
+  background: #00f0ff;
+  border-color: #00f0ff;
+  color: #010309;
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.85);
+}
+
+/* 3D Liquid Active Session Banner */
+.3d-liquid-banner {
+  background: linear-gradient(135deg, rgba(0, 55, 45, 0.65) 0%, rgba(0, 80, 105, 0.55) 100%);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 255, 170, 0.4);
+  border-radius: 18px;
+  padding: 1.45rem 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.55),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.3),
+    inset 0 0 25px rgba(0, 255, 170, 0.12);
+}
+
+.banner-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.banner-main-title {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #00ffaa;
+  text-shadow: 0 0 12px rgba(0, 255, 170, 0.6);
+}
+
+.banner-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #00ffaa;
+  box-shadow: 0 0 12px #00ffaa, 0 0 24px rgba(0, 255, 170, 0.6);
+}
+
+.banner-desc {
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.88rem;
+  color: rgba(220, 250, 255, 0.8);
+}
+
+.3d-shield-glow {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(0, 220, 255, 0.18) 0%, rgba(176, 38, 255, 0.12) 100%);
+  border: 1px solid rgba(0, 240, 255, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 22px rgba(0, 220, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* Toast Banner */
+.toast-banner {
+  padding: 0.75rem 1.25rem;
+  border-radius: 12px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+}
+.toast-success {
+  background: rgba(0, 255, 170, 0.16);
+  border: 1px solid rgba(0, 255, 170, 0.5);
+  color: #00ffaa;
+  box-shadow: 0 0 18px rgba(0, 255, 170, 0.25);
+}
+.toast-error {
+  background: rgba(255, 50, 80, 0.16);
+  border: 1px solid rgba(255, 50, 80, 0.5);
+  color: #ff3250;
+  box-shadow: 0 0 18px rgba(255, 50, 80, 0.25);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ULTRA FUTURISTIC 3D SCI-FI HUD BUTTONS
+   ═══════════════════════════════════════════════════════════════ */
+.profile-action-buttons-row {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.futuristic-hud-btn {
+  position: relative;
+  height: 58px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 240, 255, 0.45);
+  cursor: pointer;
+  outline: none;
+  overflow: hidden;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.hud-btn-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.hud-btn-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  height: 100%;
+  padding: 0 2rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+}
+
+.hud-btn-icon {
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 8px currentColor);
+}
+
+/* SAVE CHANGES HUD BUTTON */
+.btn-hud-save {
+  flex: 1.5;
+  background: linear-gradient(90deg, #0088ff, #7b2cbf, #00e5ff);
+  background-size: 200% 200%;
+  animation: hudSheen 6s ease infinite;
+  color: #ffffff;
+  border-color: rgba(0, 240, 255, 0.6);
+  box-shadow:
+    0 12px 35px rgba(0, 160, 255, 0.45),
+    0 0 25px rgba(123, 44, 191, 0.35),
+    inset 0 2px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.4);
+}
+.btn-hud-save:hover:not(:disabled) {
+  border-color: #00ffff;
+  color: #ffffff;
+  box-shadow:
+    0 15px 45px rgba(0, 220, 255, 0.75),
+    0 0 35px rgba(176, 38, 255, 0.65),
+    inset 0 2px 0 rgba(255, 255, 255, 0.75);
+  transform: translateY(-3px) scale(1.015);
+}
+
+/* LOG OUT HUD BUTTON */
+.btn-hud-logout {
+  flex: 1;
+  background: linear-gradient(135deg, rgba(160, 15, 45, 0.6) 0%, rgba(90, 10, 30, 0.8) 100%);
+  border-color: rgba(255, 60, 90, 0.65);
+  color: #ff5277;
+  box-shadow:
+    0 12px 30px rgba(160, 15, 45, 0.4),
+    0 0 20px rgba(255, 50, 80, 0.25),
+    inset 0 2px 0 rgba(255, 120, 140, 0.4),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.4);
+}
+.btn-hud-logout:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(220, 20, 65, 0.8) 0%, rgba(140, 10, 40, 0.95) 100%);
+  border-color: #ff3366;
+  color: #ffffff;
+  box-shadow:
+    0 15px 40px rgba(255, 50, 80, 0.7),
+    0 0 30px rgba(255, 50, 80, 0.5),
+    inset 0 2px 0 rgba(255, 255, 255, 0.6);
+  transform: translateY(-3px) scale(1.015);
+}
+
+@keyframes hudSheen {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.loading {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.btn-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid #ffffff;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin-anim 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin-anim {
+  to { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE DESIGN ACROSS ALL DEVICE SIZES
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 1100px) {
+  .profile-main-container {
+    padding: 1.5rem 2rem 2.5rem;
+  }
+  .profile-content-grid {
+    flex-direction: column;
+    align-items: center;
+  }
+  .profile-sidebar-panel {
+    width: 100%;
+  }
+  .profile-main-section {
+    width: 100%;
+  }
+}
+
+@media (max-width: 680px) {
+  .profile-main-container {
+    padding: 1.25rem 1rem 2rem;
+  }
+  .profile-hero-block {
+    flex-direction: column;
+    text-align: center;
+    gap: 1.25rem;
+  }
+  .bio-name-row,
+  .bio-username-row {
+    justify-content: center;
+  }
+  .3d-liquid-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+  .field-bar-right {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .field-text-input {
+    width: 100%;
+    max-width: 100%;
+  }
+  .profile-action-buttons-row {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .futuristic-hud-btn {
+    width: 100%;
+    height: 52px;
+  }
+}

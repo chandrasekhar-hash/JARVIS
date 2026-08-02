@@ -2,12 +2,18 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Try to load from frontend .env first, then fallback to current folder or system env
-frontend_env_path = Path(__file__).resolve().parents[1] / 'frontend' / '.env'
-if frontend_env_path.exists():
-    load_dotenv(dotenv_path=frontend_env_path)
-else:
-    load_dotenv()
+# Priority loading for backend environment configuration
+backend_dir = Path(__file__).resolve().parent
+project_root = backend_dir.parent
+frontend_dir = project_root / 'frontend'
+
+# Load in order: frontend .env -> root .env -> backend .env (so backend .env overrides)
+if (frontend_dir / '.env').exists():
+    load_dotenv(dotenv_path=frontend_dir / '.env')
+if (project_root / '.env').exists():
+    load_dotenv(dotenv_path=project_root / '.env', override=True)
+if (backend_dir / '.env').exists():
+    load_dotenv(dotenv_path=backend_dir / '.env', override=True)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY") or os.getenv("VITE_GROQ_API_KEY")
 ACTIVE_PROVIDER = os.getenv("ACTIVE_PROVIDER", "groq")

@@ -113,6 +113,75 @@ class SQLiteIdentityStorage:
                 )
             """)
 
+            # 6. User Credentials table for authentication
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_credentials (
+                    username TEXT PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    display_name TEXT,
+                    created_at REAL NOT NULL,
+                    password_updated_at REAL DEFAULT 0
+                )
+            """)
+
+            # Ensure columns exist if tables were created in an earlier schema
+            try:
+                cursor.execute("ALTER TABLE user_credentials ADD COLUMN password_updated_at REAL DEFAULT 0")
+            except Exception:
+                pass
+
+            try:
+                cursor.execute("ALTER TABLE user_credentials ADD COLUMN is_verified INTEGER DEFAULT 0")
+                cursor.execute("UPDATE user_credentials SET is_verified = 1 WHERE is_verified IS NULL OR is_verified = 0")
+            except Exception:
+                pass
+
+            # 7. OTP Challenges table for password reset & registration
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS otp_challenges (
+                    challenge_id TEXT PRIMARY KEY,
+                    email TEXT NOT NULL,
+                    otp_hash TEXT NOT NULL,
+                    salt TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    expires_at REAL NOT NULL,
+                    attempts INTEGER DEFAULT 0,
+                    resend_count INTEGER DEFAULT 1,
+                    last_sent_at REAL NOT NULL,
+                    verified INTEGER DEFAULT 0,
+                    purpose TEXT DEFAULT 'password_reset'
+                )
+            """)
+
+            try:
+                cursor.execute("ALTER TABLE otp_challenges ADD COLUMN purpose TEXT DEFAULT 'password_reset'")
+            except Exception:
+                pass
+
+            # 8. Password Reset Tokens table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                    reset_token TEXT PRIMARY KEY,
+                    email TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    expires_at REAL NOT NULL,
+                    used INTEGER DEFAULT 0
+                )
+            """)
+
+            # 9. Registration Verification Tokens table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS registration_verification_tokens (
+                    verification_token TEXT PRIMARY KEY,
+                    email TEXT NOT NULL,
+                    username TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    expires_at REAL NOT NULL,
+                    used INTEGER DEFAULT 0
+                )
+            """)
+
             conn.commit()
             log_structured(backend_log, "INFO", f"[IdentityStorage] Initialized Identity & Security tables in '{self.db_path}' ({SCHEMA_VERSION})")
 
@@ -356,4 +425,269 @@ class SQLiteIdentityStorage:
                 for r in rows
             ]
 
+    # --- User Credentials CRUD ---
+
+    def save_user_credential(self, username: str, email: str, password_hash: str, display_name: str = None, is_verified: int = 0) -> Dict[str, Any]:
+        clean_username = username.strip().lower()
+        clean_email = email.strip().lower()
+        now = time.time()
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO user_credentials (username, email, password_hash, display_name, created_at, is_verified)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(username) DO UPDATE SET
+                    email=excluded.email,
+                    password_hash=excluded.password_hash,
+                    display_name=excluded.display_name,
+                    is_verified=excluded.is_verified
+                """,
+                (clean_username, clean_email, password_hash, display_name or clean_username, now, is_verified)
+            )
+            conn.commit()
+        return {
+            "username": clean_username,
+            "email": clean_email,
+            "display_name": display_name or clean_username,
+            "created_at": now,
+            "is_verified": is_verified
+        }
+
+    def mark_user_verified(self, email_or_username: str) -> bool:
+        clean_id = email_or_username.strip().lower()
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE user_credentials SET is_verified = 1 WHERE LOWER(email) = ? OR LOWER(username) = ?",
+                (clean_id, clean_id)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_user_credential_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        clean_username = username.strip().lower()
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM user_credentials WHERE LOWER(username) = ?", (clean_username,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return dict(row)
+
+    def get_user_credential_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        clean_email = email.strip().lower()
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM user_credentials WHERE LOWER(email) = ?", (clean_email,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return dict(row)
+
+    def get_user_credential_by_identifier(self, identifier: str) -> Optional[Dict[str, Any]]:
+        clean_id = identifier.strip().lower()
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM user_credentials WHERE LOWER(username) = ? OR LOWER(email) = ?",
+                (clean_id, clean_id)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return dict(row)
+
+    def update_user_password(self, email: str, new_password_hash: str) -> bool:
+        clean_email = email.strip().lower()
+        now = time.time()
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE user_credentials SET password_hash = ?, password_updated_at = ? WHERE LOWER(email) = ?",
+                (new_password_hash, now, clean_email)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def update_user_profile_fields(self, username: str, display_name: str = None, new_username: str = None) -> Optional[Dict[str, Any]]:
+        """Update display_name and/or username for a user. Returns updated record or None on failure."""
+        clean_username = username.strip().lower()
+        with self._get_connection() as conn:
+            row_cursor = conn.execute(
+                "SELECT * FROM user_credentials WHERE LOWER(username) = ?", (clean_username,)
+            )
+            row = row_cursor.fetchone()
+            if not row:
+                return None
+
+            updated_display_name = display_name.strip() if display_name and display_name.strip() else row["display_name"]
+            updated_username = new_username.strip().lower() if new_username and new_username.strip() else clean_username
+
+            # If username is being changed, verify no conflict
+            if updated_username != clean_username:
+                conflict = conn.execute(
+                    "SELECT username FROM user_credentials WHERE LOWER(username) = ? AND LOWER(username) != ?",
+                    (updated_username, clean_username)
+                ).fetchone()
+                if conflict:
+                    return {"error": "username_taken"}
+
+            conn.execute(
+                """UPDATE user_credentials
+                   SET display_name = ?, username = ?
+                   WHERE LOWER(username) = ?""",
+                (updated_display_name, updated_username, clean_username)
+            )
+            conn.commit()
+
+            updated_row = conn.execute(
+                "SELECT * FROM user_credentials WHERE LOWER(username) = ?", (updated_username,)
+            ).fetchone()
+            if not updated_row:
+                return None
+            return dict(updated_row)
+
+    def revoke_all_user_sessions(self, username_or_email: str) -> None:
+        clean_id = username_or_email.strip().lower()
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE session_tokens SET status = 'revoked' WHERE user_id = ? OR user_id IN (SELECT username FROM user_credentials WHERE LOWER(email) = ?)",
+                (clean_id, clean_id)
+            )
+            conn.commit()
+
+    # --- OTP Challenges CRUD ---
+
+    def create_otp_challenge(self, email: str, otp_hash: str, salt: str, purpose: str = "password_reset") -> Dict[str, Any]:
+        clean_email = email.strip().lower()
+        now = time.time()
+        expires_at = now + 600  # 10 minutes
+        challenge_id = f"otp_{os.urandom(8).hex()}"
+
+        with self._get_connection() as conn:
+            # Invalidate previous unverified challenges for this email and purpose
+            conn.execute(
+                "UPDATE otp_challenges SET verified = -1 WHERE LOWER(email) = ? AND purpose = ? AND verified = 0",
+                (clean_email, purpose)
+            )
+            conn.execute(
+                """
+                INSERT INTO otp_challenges (challenge_id, email, otp_hash, salt, created_at, expires_at, attempts, resend_count, last_sent_at, verified, purpose)
+                VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, 0, ?)
+                """,
+                (challenge_id, clean_email, otp_hash, salt, now, expires_at, now, purpose)
+            )
+            conn.commit()
+
+        return {
+            "challenge_id": challenge_id,
+            "email": clean_email,
+            "created_at": now,
+            "expires_at": expires_at,
+            "purpose": purpose
+        }
+
+    def get_latest_otp_challenge(self, email: str, purpose: str = "password_reset") -> Optional[Dict[str, Any]]:
+        clean_email = email.strip().lower()
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM otp_challenges WHERE LOWER(email) = ? AND purpose = ? AND verified = 0 ORDER BY created_at DESC LIMIT 1",
+                (clean_email, purpose)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return dict(row)
+
+    def increment_otp_attempt(self, challenge_id: str) -> int:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE otp_challenges SET attempts = attempts + 1 WHERE challenge_id = ?",
+                (challenge_id,)
+            )
+            cursor = conn.execute("SELECT attempts FROM otp_challenges WHERE challenge_id = ?", (challenge_id,))
+            row = cursor.fetchone()
+            attempts = row["attempts"] if row else 0
+            if attempts >= 5:
+                conn.execute("UPDATE otp_challenges SET verified = -1 WHERE challenge_id = ?", (challenge_id,))
+            conn.commit()
+            return attempts
+
+    def mark_otp_challenge_verified(self, challenge_id: str) -> None:
+        with self._get_connection() as conn:
+            conn.execute("UPDATE otp_challenges SET verified = 1 WHERE challenge_id = ?", (challenge_id,))
+            conn.commit()
+
+    # --- Password Reset Tokens CRUD ---
+
+    def create_password_reset_token(self, email: str) -> str:
+        clean_email = email.strip().lower()
+        now = time.time()
+        expires_at = now + 600  # 10 minutes
+        reset_token = f"rst_{os.urandom(16).hex()}"
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO password_reset_tokens (reset_token, email, created_at, expires_at, used)
+                VALUES (?, ?, ?, ?, 0)
+                """,
+                (reset_token, clean_email, now, expires_at)
+            )
+            conn.commit()
+
+        return reset_token
+
+    def get_password_reset_token(self, reset_token: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM password_reset_tokens WHERE reset_token = ?",
+                (reset_token,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return dict(row)
+
+    def mark_password_reset_token_used(self, reset_token: str) -> None:
+        with self._get_connection() as conn:
+            conn.execute("UPDATE password_reset_tokens SET used = 1 WHERE reset_token = ?", (reset_token,))
+            conn.commit()
+
+    # --- Registration Verification Tokens CRUD ---
+
+    def create_registration_token(self, email: str, username: str) -> str:
+        clean_email = email.strip().lower()
+        clean_username = username.strip().lower()
+        now = time.time()
+        expires_at = now + 900  # 15 minutes
+        verification_token = f"reg_{os.urandom(16).hex()}"
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO registration_verification_tokens (verification_token, email, username, created_at, expires_at, used)
+                VALUES (?, ?, ?, ?, ?, 0)
+                """,
+                (verification_token, clean_email, clean_username, now, expires_at)
+            )
+            conn.commit()
+
+        return verification_token
+
+    def get_valid_registration_token(self, verification_token: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM registration_verification_tokens WHERE verification_token = ?",
+                (verification_token,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            token_data = dict(row)
+            if token_data.get("used") == 1 or time.time() > token_data.get("expires_at", 0):
+                return None
+            return token_data
+
+    def mark_registration_token_used(self, verification_token: str) -> None:
+        with self._get_connection() as conn:
+            conn.execute("UPDATE registration_verification_tokens SET used = 1 WHERE verification_token = ?", (verification_token,))
+            conn.commit()
+
 identity_storage = SQLiteIdentityStorage()
+

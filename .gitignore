@@ -14,10 +14,16 @@ __pycache__/
 
 # Local configurations & backups
 .env
+*.env
+backend/.env
+frontend/.env
 .env.local
 *.env.bak
 *.bak
 app_cache.json
+
+# Raw Root Media
+/*.mp4
 
 # Dependencies & Build Outputs
 node_modules/
