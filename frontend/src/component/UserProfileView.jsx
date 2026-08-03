@@ -1,7 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAXLAuth } from '../axl/context/AXLAuthContext';
 import { useAXLRouter, ROUTE_STATES } from '../axl/context/AXLRouterContext';
+import { fetchWithAuth } from '../axl/services/apiInterceptor';
 import './UserProfileView.css';
+
+const safeParseJson = async (res) => {
+  try {
+    const text = await res.text();
+    if (!text || !text.trim()) return {};
+    return JSON.parse(text);
+  } catch (_) {
+    return { detail: 'Server returned an invalid response.' };
+  }
+};
 
 /* ─── Curated Futuristic & Science Quotes Collection ─────────────────── */
 const JARVIS_QUOTES = [
@@ -207,6 +218,60 @@ export default function UserProfileView() {
     try { await logout(); } catch (_) { setLogoutState('idle'); }
   };
 
+  /* ── Account Deletion Modal States ── */
+  const [showDeleteModalStep1, setShowDeleteModalStep1] = useState(false);
+  const [showDeleteModalStep2, setShowDeleteModalStep2] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [confirmCheckbox, setConfirmCheckbox] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleConfirmAccountDelete = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!deletePassword || !confirmCheckbox || isDeletingAccount) return;
+
+    setIsDeletingAccount(true);
+    setDeleteError('');
+
+    try {
+      const res = await fetchWithAuth('/account/delete', {
+        method: 'POST',
+        body: JSON.stringify({ password: deletePassword }),
+      });
+      const data = await safeParseJson(res);
+      if (!res.ok) {
+        let errMsg = 'Incorrect password.';
+        if (typeof data.detail === 'string') {
+          errMsg = data.detail;
+        } else if (Array.isArray(data.detail) && data.detail.length > 0) {
+          errMsg = data.detail[0]?.msg || 'Validation error.';
+        } else if (data.message) {
+          errMsg = data.message;
+        }
+        throw new Error(errMsg);
+      }
+
+      localStorage.clear();
+      sessionStorage.clear();
+
+      setShowDeleteModalStep1(false);
+      setShowDeleteModalStep2(false);
+
+      if (logout) {
+        await logout();
+      }
+
+      if (navigateTo) {
+        navigateTo(ROUTE_STATES.UNAUTHENTICATED);
+      }
+    } catch (err) {
+      setDeleteError(err.message || 'Failed to delete account.');
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
   const handleBackToConsole = () => {
     navigateTo(ROUTE_STATES.AUTHENTICATED);
   };
@@ -245,7 +310,7 @@ export default function UserProfileView() {
 
           {/* LEFT SIDEBAR PANEL */}
           <aside className="profile-sidebar-panel" aria-label="System Identity">
-            <div className="sidebar-glass-card 3d-liquid-glass">
+            <div className="sidebar-glass-card _3d-liquid-glass">
 
               {/* Glossy reflection overlay */}
               <div className="glass-shine-overlay" aria-hidden="true" />
@@ -297,7 +362,7 @@ export default function UserProfileView() {
               </div>
 
               {/* RANDOM FUTURISTIC QUOTE BLOCK */}
-              <div className="sidebar-quote-card 3d-liquid-card">
+              <div className="sidebar-quote-card _3d-liquid-card">
                 <span className="quote-icon">“</span>
                 <p className="quote-body">{quote.text}</p>
                 <span className="quote-author">— {quote.author}</span>
@@ -313,7 +378,7 @@ export default function UserProfileView() {
             <div className="profile-hero-block">
               {/* 3D Glowing Avatar Ring */}
               <div className="avatar-ring-container">
-                <div className="avatar-ring-outer 3d-avatar-glow">
+                <div className="avatar-ring-outer _3d-avatar-glow">
                   <div className="avatar-ring-inner">
                     <span className="avatar-initials-text">{liveInitials}</span>
                   </div>
@@ -387,7 +452,7 @@ export default function UserProfileView() {
 
               <div className="input-rows-wrapper">
                 {/* DISPLAY NAME ROW */}
-                <div className={`field-glass-bar 3d-liquid-bar ${isEditingName ? 'active-editing' : ''}`}>
+                <div className={`field-glass-bar _3d-liquid-bar ${isEditingName ? 'active-editing' : ''}`}>
                   <div className="field-bar-left">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="field-icon">
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -421,7 +486,7 @@ export default function UserProfileView() {
                 </div>
 
                 {/* USERNAME ROW */}
-                <div className={`field-glass-bar 3d-liquid-bar ${isEditingUser ? 'active-editing' : ''}`}>
+                <div className={`field-glass-bar _3d-liquid-bar ${isEditingUser ? 'active-editing' : ''}`}>
                   <div className="field-bar-left">
                     <span className="field-icon-text">@</span>
                     <span className="field-label-text">USERNAME</span>
@@ -452,7 +517,7 @@ export default function UserProfileView() {
                 </div>
 
                 {/* EMAIL ADDRESS ROW (READ-ONLY) */}
-                <div className="field-glass-bar 3d-liquid-bar readonly-bar">
+                <div className="field-glass-bar _3d-liquid-bar readonly-bar">
                   <div className="field-bar-left">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="field-icon">
                       <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
@@ -480,7 +545,7 @@ export default function UserProfileView() {
                 <span>ACCOUNT STATUS</span>
               </div>
 
-              <div className="active-session-glass-banner 3d-liquid-banner">
+              <div className="active-session-glass-banner _3d-liquid-banner">
                 <div className="banner-text-group">
                   <div className="banner-main-title">
                     <span className="banner-dot" aria-hidden="true" />
@@ -488,12 +553,44 @@ export default function UserProfileView() {
                   </div>
                   <p className="banner-desc">Your account is active and secure.</p>
                 </div>
-                <div className="banner-shield-box 3d-shield-glow">
+                <div className="banner-shield-box _3d-shield-glow">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00d2ff" strokeWidth="2">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                     <polyline points="9 12 11 14 15 10" />
                   </svg>
                 </div>
+              </div>
+            </div>
+
+            {/* DANGER ZONE SECTION */}
+            <div className="profile-section-block danger-zone-block">
+              <div className="section-header-title danger-header-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff4d4d" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <span>DANGER ZONE</span>
+              </div>
+
+              <div className="danger-zone-glass-banner _3d-liquid-banner">
+                <div className="danger-text-group">
+                  <div className="danger-main-title">Deleting your account is permanent.</div>
+                  <p className="danger-desc">
+                    This action will permanently remove your JARVIS account and cannot be undone.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn-danger-delete-outlined"
+                  onClick={() => {
+                    setShowDeleteModalStep1(true);
+                    setShowDeleteModalStep2(false);
+                    setDeleteError('');
+                  }}
+                >
+                  Delete My Account
+                </button>
               </div>
             </div>
 
@@ -559,6 +656,146 @@ export default function UserProfileView() {
 
         </div>
       </main>
+
+      {/* STEP 1: DELETE CONFIRMATION MODAL */}
+      {showDeleteModalStep1 && (
+        <div className="delete-modal-overlay">
+          <div className="delete-modal-card _3d-liquid-modal">
+            <div className="delete-modal-header">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff4d4d" strokeWidth="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <h3>Delete Account</h3>
+            </div>
+            <div className="delete-modal-body">
+              <p className="delete-warning-bold">This action is permanent.</p>
+              <p className="delete-warning-sub">Deleting your account will remove:</p>
+              <ul className="delete-removal-list">
+                <li>• Profile</li>
+                <li>• Memory</li>
+                <li>• Personal settings</li>
+                <li>• Saved preferences</li>
+                <li>• Chat history owned by JARVIS</li>
+                <li>• Active sessions</li>
+              </ul>
+              <p className="delete-warning-bold">This action cannot be undone.</p>
+            </div>
+            <div className="delete-modal-footer">
+              <button
+                type="button"
+                className="modal-btn-cancel"
+                onClick={() => setShowDeleteModalStep1(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="modal-btn-danger"
+                onClick={() => {
+                  setShowDeleteModalStep1(false);
+                  setShowDeleteModalStep2(true);
+                  setDeletePassword('');
+                  setConfirmCheckbox(false);
+                  setDeleteError('');
+                }}
+              >
+                Delete Account
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 2: PASSWORD CONFIRMATION MODAL */}
+      {showDeleteModalStep2 && (
+        <div className="delete-modal-overlay">
+          <div className="delete-modal-card _3d-liquid-modal">
+            <div className="delete-modal-header">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff4d4d" strokeWidth="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              <h3>Confirm Password</h3>
+            </div>
+            <form onSubmit={handleConfirmAccountDelete} className="delete-modal-body">
+              {deleteError && (
+                <div className="delete-modal-error">
+                  ⚠️ {deleteError}
+                </div>
+              )}
+              <div className="delete-input-group">
+                <label htmlFor="current-password-input">Current Password</label>
+                <div className="delete-password-wrapper">
+                  <input
+                    id="current-password-input"
+                    type={showDeletePassword ? 'text' : 'password'}
+                    className="delete-password-input"
+                    placeholder="Enter your current password"
+                    value={deletePassword}
+                    onChange={(e) => {
+                      setDeletePassword(e.target.value);
+                      setDeleteError('');
+                    }}
+                    disabled={isDeletingAccount}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="delete-password-toggle-btn"
+                    onClick={() => setShowDeletePassword(!showDeletePassword)}
+                    aria-label={showDeletePassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showDeletePassword ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+              <label className="delete-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={confirmCheckbox}
+                  onChange={(e) => setConfirmCheckbox(e.target.checked)}
+                  disabled={isDeletingAccount}
+                />
+                <span>I understand this action cannot be undone.</span>
+              </label>
+              <div className="delete-modal-footer">
+                <button
+                  type="button"
+                  className="modal-btn-cancel"
+                  onClick={() => {
+                    setShowDeleteModalStep2(false);
+                    setDeletePassword('');
+                    setConfirmCheckbox(false);
+                    setDeleteError('');
+                  }}
+                  disabled={isDeletingAccount}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="modal-btn-danger"
+                  disabled={!deletePassword || !confirmCheckbox || isDeletingAccount}
+                >
+                  {isDeletingAccount ? 'DELETING...' : 'DELETE MY ACCOUNT'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

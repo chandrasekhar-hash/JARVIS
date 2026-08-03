@@ -652,6 +652,7 @@
   display: flex;
   justify-content: space-between;
   gap: 8px;
+  margin-top: 6px;
   margin-bottom: 14px;
 }
 
@@ -666,30 +667,47 @@
   font-weight: 700;
   color: #00ffe1;
   outline: none;
+  font-family: 'Orbitron', monospace;
   transition: all 0.2s ease;
 }
 
 .otp-digit-box:focus {
   border-color: #00ffe1;
-  box-shadow: 0 0 10px rgba(0, 255, 225, 0.3);
+  box-shadow: 0 0 12px rgba(0, 255, 225, 0.35);
   background: rgba(10, 25, 45, 0.8);
 }
 
-.otp-actions-row {
+.otp-digit-box.otp-error-glow {
+  border-color: #ff4d6d;
+  box-shadow: 0 0 12px rgba(255, 77, 109, 0.4);
+}
+
+.otp-actions-container {
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: 16px;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+  font-size: 0.8rem;
+}
+
+.otp-resend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .resend-code-btn {
   background: none;
   border: none;
   color: #00ffe1;
+  font-family: inherit;
   font-size: 0.8rem;
+  font-weight: 600;
   cursor: pointer;
   padding: 0;
   opacity: 0.85;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, text-shadow 0.2s ease;
 }
 
 .resend-code-btn:disabled {
@@ -700,12 +718,43 @@
 
 .resend-code-btn:not(:disabled):hover {
   opacity: 1;
+  text-shadow: 0 0 8px rgba(0, 255, 225, 0.5);
   text-decoration: underline;
+}
+
+.otp-back-btn {
+  background: none;
+  border: none;
+  color: rgba(0, 255, 225, 0.8);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+  align-self: flex-start;
+}
+
+.otp-back-btn:hover {
+  color: #00ffe1;
+  text-shadow: 0 0 8px rgba(0, 255, 225, 0.4);
 }
 
 .highlight-email {
   color: #00ffe1;
   font-weight: 600;
+}
+
+.mock-dev-notice {
+  font-size: 0.72rem;
+  color: rgba(255, 200, 0, 0.85);
+  background: rgba(255, 200, 0, 0.08);
+  border: 1px dashed rgba(255, 200, 0, 0.35);
+  border-radius: 6px;
+  padding: 5px 10px;
+  margin-bottom: 12px;
+  text-align: center;
+  letter-spacing: 0.5px;
 }
 
 /* RECOVERY SUCCESS BOX */

@@ -1,55 +1,188 @@
 import os
-import smtplib
 import logging
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from typing import Optional, Dict, Any
+from pathlib import Path
+import httpx
+from dotenv import load_dotenv
 
 logger = logging.getLogger("jarvis_email")
 
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+
 class EmailService:
     """
-    Centralized Email Delivery Service for JARVIS with production SMTP support
-    and Development mode fallback.
-    Configured via environment variables:
-    - SMTP_HOST
-    - SMTP_PORT (default 587)
-    - SMTP_USER
-    - SMTP_PASSWORD
-    - SMTP_FROM_EMAIL
-    - JARVIS_ENV (development/test/production)
+    Centralized Email Delivery Service for JARVIS supporting Brevo Transactional Email API (REST v3).
+    Configured via backend/.env:
+    - BREVO_API_KEY
+    - BREVO_SENDER_EMAIL
+    - BREVO_SENDER_NAME
     """
 
     def __init__(self):
         self._load_config()
 
     def _load_config(self):
-        self.smtp_host = os.getenv("SMTP_HOST", "").strip()
-        port_str = os.getenv("SMTP_PORT", "587").strip()
-        self.smtp_port = int(port_str) if port_str.isdigit() else 587
-        self.smtp_user = os.getenv("SMTP_USER", "").strip()
-        self.smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
-        self.from_email = os.getenv("SMTP_FROM_EMAIL", "").strip() or self.smtp_user or "noreply@jarvis.ai"
-        self.env = os.getenv("JARVIS_ENV", "development").lower().strip()
+        backend_dir = Path(__file__).resolve().parent.parent
+        backend_env = backend_dir / ".env"
+        if backend_env.exists():
+            load_dotenv(dotenv_path=backend_env, override=True)
+
+        self.brevo_api_key = os.getenv("BREVO_API_KEY", "").strip()
+        self.brevo_sender_email = os.getenv("BREVO_SENDER_EMAIL", "").strip()
+        self.brevo_sender_name = os.getenv("BREVO_SENDER_NAME", "JARVIS").strip() or "JARVIS"
 
     @property
-    def is_configured(self) -> bool:
+    def is_brevo_configured(self) -> bool:
         self._load_config()
-        return bool(self.smtp_host and self.smtp_user and self.smtp_password)
+        return bool(self.brevo_api_key and self.brevo_sender_email)
 
-    def _dispatch_smtp(self, clean_email: str, msg: MIMEMultipart) -> None:
+    def send_brevo_email(
+        self,
+        to_email: str,
+        subject: str,
+        html_body: str,
+        text_body: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Sends an email using Brevo Transactional Email API (REST v3).
+        NEVER logs or exposes BREVO_API_KEY or secret headers.
+        """
         self._load_config()
-        if self.smtp_port == 465:
-            with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=15) as server:
-                server.login(self.smtp_user, self.smtp_password)
-                server.sendmail(self.from_email, [clean_email], msg.as_string())
-        else:
-            with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                server.login(self.smtp_user, self.smtp_password)
-                server.sendmail(self.from_email, [clean_email], msg.as_string())
+        if not self.brevo_api_key:
+            raise RuntimeError("Brevo API key is missing or not configured.")
+        if not self.brevo_sender_email:
+            raise RuntimeError("Brevo sender email is missing or not configured.")
+
+        clean_to_email = to_email.strip().lower()
+        if not clean_to_email or "@" not in clean_to_email:
+            raise ValueError(f"Invalid recipient email address: {to_email}")
+
+        headers = {
+            "accept": "application/json",
+            "api-key": self.brevo_api_key,
+            "content-type": "application/json"
+        }
+
+        payload = {
+            "sender": {
+                "name": self.brevo_sender_name,
+                "email": self.brevo_sender_email
+            },
+            "to": [
+                {"email": clean_to_email}
+            ],
+            "subject": subject,
+            "htmlContent": html_body
+        }
+        if text_body:
+            payload["textContent"] = text_body
+
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                response = client.post(BREVO_API_URL, headers=headers, json=payload)
+                
+            if response.status_code in (200, 201, 202):
+                res_data = response.json()
+                message_id = res_data.get("messageId", "UNKNOWN_MSG_ID")
+                logger.info(f"[EmailService] Brevo email sent successfully to {clean_to_email} | MessageID: {message_id}")
+                return {
+                    "success": True,
+                    "status_code": response.status_code,
+                    "message_id": message_id,
+                    "detail": "Email accepted by Brevo API"
+                }
+            else:
+                try:
+                    err_json = response.json()
+                    err_msg = err_json.get("message") or err_json.get("code") or response.text
+                except Exception:
+                    err_msg = response.text or f"HTTP {response.status_code}"
+                
+                logger.error(f"[EmailService] Brevo API Error ({response.status_code}): {err_msg}")
+                raise RuntimeError(f"Brevo API delivery failed (Status {response.status_code}): {err_msg}")
+
+        except httpx.TimeoutException:
+            logger.error(f"[EmailService] Brevo API connection timed out for {clean_to_email}")
+            raise RuntimeError("Unable to send verification code. Connection timed out.")
+        except httpx.RequestError as req_err:
+            logger.error(f"[EmailService] Brevo API network error: {req_err}")
+            raise RuntimeError("Unable to send verification code. Network failure.")
+
+    def send_registration_otp(self, to_email: str, otp: str) -> bool:
+        """
+        Sends Registration OTP via Brevo Transactional Email API.
+        """
+        subject = "JARVIS — Verify Your Email"
+        
+        text_body = (
+            "J.A.R.V.I.S.\n\n"
+            "EMAIL VERIFICATION\n\n"
+            "Your verification code is:\n\n"
+            f"{otp}\n\n"
+            "This code expires in 10 minutes.\n\n"
+            "If you did not request this, ignore this email."
+        )
+
+        html_body = (
+            "<!DOCTYPE html>"
+            "<html><head><meta charset='utf-8'></head>"
+            "<body style='font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; background-color: #0b0f19; color: #e6edf3; margin: 0; padding: 40px 20px;'>"
+            "<div style='max-width: 480px; margin: 0 auto; background-color: #131b2e; border: 1px solid #1f293d; border-radius: 12px; padding: 32px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);'>"
+            "<div style='text-align: center; margin-bottom: 24px;'>"
+            "<h1 style='color: #00f2fe; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: 3px;'>J.A.R.V.I.S.</h1>"
+            "<p style='color: #64748b; margin-top: 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 2px;'>EMAIL VERIFICATION</p>"
+            "</div>"
+            "<p style='font-size: 15px; color: #cbd5e1; text-align: center; margin-bottom: 8px;'>Your verification code is:</p>"
+            "<div style='text-align: center; background-color: #0b0f19; border: 1px solid #1e293b; border-radius: 8px; padding: 18px; margin: 20px 0;'>"
+            f"<span style='font-family: \"Courier New\", Courier, monospace; font-size: 36px; font-weight: 700; color: #00f2fe; letter-spacing: 8px;'>{otp}</span>"
+            "</div>"
+            "<p style='font-size: 14px; color: #94a3b8; text-align: center; margin: 0;'>This code expires in <strong>10 minutes</strong>.</p>"
+            "<div style='margin-top: 32px; border-top: 1px solid #1e293b; padding-top: 16px; text-align: center;'>"
+            "<p style='font-size: 12px; color: #475569; margin: 0;'>If you did not request this, ignore this email.</p>"
+            "</div>"
+            "</div></body></html>"
+        )
+
+        res = self.send_brevo_email(to_email, subject, html_body, text_body)
+        return res.get("success", False)
+
+    def send_password_reset_otp(self, to_email: str, otp: str) -> bool:
+        """
+        Sends Password Reset OTP via Brevo Transactional Email API.
+        """
+        subject = "JARVIS — Password Reset"
+
+        text_body = (
+            "J.A.R.V.I.S.\n\n"
+            "PASSWORD RESET\n\n"
+            "Your verification code is:\n\n"
+            f"{otp}\n\n"
+            "This code expires in 10 minutes.\n\n"
+            "If you did not request a password reset, ignore this email."
+        )
+
+        html_body = (
+            "<!DOCTYPE html>"
+            "<html><head><meta charset='utf-8'></head>"
+            "<body style='font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; background-color: #0b0f19; color: #e6edf3; margin: 0; padding: 40px 20px;'>"
+            "<div style='max-width: 480px; margin: 0 auto; background-color: #131b2e; border: 1px solid #1f293d; border-radius: 12px; padding: 32px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);'>"
+            "<div style='text-align: center; margin-bottom: 24px;'>"
+            "<h1 style='color: #00f2fe; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: 3px;'>J.A.R.V.I.S.</h1>"
+            "<p style='color: #64748b; margin-top: 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 2px;'>PASSWORD RESET</p>"
+            "</div>"
+            "<p style='font-size: 15px; color: #cbd5e1; text-align: center; margin-bottom: 8px;'>Your verification code is:</p>"
+            "<div style='text-align: center; background-color: #0b0f19; border: 1px solid #1e293b; border-radius: 8px; padding: 18px; margin: 20px 0;'>"
+            f"<span style='font-family: \"Courier New\", Courier, monospace; font-size: 36px; font-weight: 700; color: #00f2fe; letter-spacing: 8px;'>{otp}</span>"
+            "</div>"
+            "<p style='font-size: 14px; color: #94a3b8; text-align: center; margin: 0;'>This code expires in <strong>10 minutes</strong>.</p>"
+            "<div style='margin-top: 32px; border-top: 1px solid #1e293b; padding-top: 16px; text-align: center;'>"
+            "<p style='font-size: 12px; color: #475569; margin: 0;'>If you did not request a password reset, ignore this email.</p>"
+            "</div>"
+            "</div></body></html>"
+        )
+
+        res = self.send_brevo_email(to_email, subject, html_body, text_body)
+        return res.get("success", False)
 
     def send_email(
         self,
@@ -58,35 +191,10 @@ class EmailService:
         html_body: str,
         text_body: Optional[str] = None
     ) -> bool:
-        """
-        Centralized email delivery method for JARVIS system.
-        Future JARVIS notifications and email dispatches route through this method.
-        """
-        clean_email = to_email.strip().lower()
-        if not clean_email or "@" not in clean_email:
-            raise ValueError(f"Invalid recipient email address: {to_email}")
-
-        plain_text = text_body or "This message was sent by J.A.R.V.I.S."
-
-        if self.is_configured:
-            try:
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = subject
-                msg["From"] = self.from_email
-                msg["To"] = clean_email
-                msg.attach(MIMEText(plain_text, "plain"))
-                msg.attach(MIMEText(html_body, "html"))
-
-                self._dispatch_smtp(clean_email, msg)
-                logger.info(f"[EmailService] Real email sent to {clean_email} via SMTP provider.")
-                return True
-            except Exception as e:
-                err_msg = str(e)
-                logger.error(f"[EmailService] SMTP email delivery failed for {clean_email}: {err_msg}")
-                raise RuntimeError(f"SMTP delivery failed: {err_msg}")
-
-        # Development Fallback Mode (only active when SMTP provider is NOT configured)
-        logger.info(f"[EmailService DEV] Simulated email dispatch to {clean_email} | Subject: '{subject}'")
-        return True
+        if self.is_brevo_configured:
+            res = self.send_brevo_email(to_email, subject, html_body, text_body)
+            return res.get("success", False)
+        
+        raise RuntimeError("Email provider is not configured.")
 
 email_service = EmailService()

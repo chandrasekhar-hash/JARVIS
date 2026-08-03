@@ -1067,6 +1067,23 @@ def refresh_session_api(body: Dict[str, Any]):
         raise HTTPException(status_code=401, detail=err or "Token refresh failed")
     return {"status": "success", "token_pair": token_pair.model_dump()}
 
+from api.auth import DeleteAccountRequest, delete_account
+
+@app.post("/api/account/delete")
+@app.delete("/api/account/delete")
+@app.post("/api/auth/delete-account")
+@app.delete("/api/auth/delete-account")
+@app.post("/api/auth/account")
+@app.delete("/api/auth/account")
+@app.post("/api/account")
+@app.delete("/api/account")
+@app.post("/account/delete")
+@app.delete("/account/delete")
+@app.post("/auth/delete-account")
+@app.delete("/auth/delete-account")
+def direct_app_delete_account(body: DeleteAccountRequest, request: Request, response: Response):
+    return delete_account(body, request, response)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

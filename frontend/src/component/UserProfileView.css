@@ -111,7 +111,7 @@
 /* ═══════════════════════════════════════════════════════════════
    3D LIQUID GLASS SPECULAR EFFECTS
    ═══════════════════════════════════════════════════════════════ */
-.3d-liquid-glass {
+._3d-liquid-glass {
   position: relative;
   background: linear-gradient(145deg, rgba(8, 22, 45, 0.58) 0%, rgba(2, 10, 22, 0.78) 100%);
   backdrop-filter: blur(25px) saturate(180%);
@@ -246,7 +246,7 @@
 }
 
 /* 3D Liquid Quote Card */
-.3d-liquid-card {
+._3d-liquid-card {
   margin-top: auto;
   background: linear-gradient(135deg, rgba(123, 44, 191, 0.22) 0%, rgba(0, 150, 255, 0.12) 100%);
   backdrop-filter: blur(15px);
@@ -315,7 +315,7 @@
   flex-shrink: 0;
 }
 
-.3d-avatar-glow {
+._3d-avatar-glow {
   width: 100%;
   height: 100%;
   border-radius: 50%;
@@ -462,7 +462,7 @@
   gap: 1rem;
 }
 
-.3d-liquid-bar {
+._3d-liquid-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -480,8 +480,8 @@
   width: 100%;
   box-sizing: border-box;
 }
-.3d-liquid-bar:hover,
-.3d-liquid-bar.active-editing {
+._3d-liquid-bar:hover,
+._3d-liquid-bar.active-editing {
   border-color: rgba(0, 240, 255, 0.6);
   box-shadow:
     0 12px 30px rgba(0, 0, 0, 0.6),
@@ -586,7 +586,7 @@
 }
 
 /* 3D Liquid Active Session Banner */
-.3d-liquid-banner {
+._3d-liquid-banner {
   background: linear-gradient(135deg, rgba(0, 55, 45, 0.65) 0%, rgba(0, 80, 105, 0.55) 100%);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(0, 255, 170, 0.4);
@@ -634,7 +634,7 @@
   color: rgba(220, 250, 255, 0.8);
 }
 
-.3d-shield-glow {
+._3d-shield-glow {
   width: 52px;
   height: 52px;
   border-radius: 14px;
@@ -823,7 +823,7 @@
   .bio-username-row {
     justify-content: center;
   }
-  .3d-liquid-bar {
+  ._3d-liquid-bar {
     flex-direction: column;
     align-items: stretch;
     gap: 0.75rem;
@@ -845,4 +845,308 @@
     width: 100%;
     height: 52px;
   }
+}
+
+/* ─── DANGER ZONE SECTION ─────────────────────────────────────────── */
+.danger-zone-block {
+  margin-top: 1.5rem;
+}
+
+.danger-header-title {
+  color: #ff4d4d !important;
+}
+
+.danger-zone-glass-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  background: rgba(255, 30, 30, 0.05);
+  border: 1px solid rgba(255, 60, 60, 0.25);
+  border-radius: 16px;
+  padding: 1.4rem 1.8rem;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 20px rgba(255, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.danger-zone-glass-banner:hover {
+  border-color: rgba(255, 80, 80, 0.45);
+  box-shadow: 0 4px 25px rgba(255, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.danger-main-title {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #ff6b6b;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.25rem;
+}
+
+.danger-desc {
+  font-size: 0.88rem;
+  color: #c4d0e3;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.btn-danger-delete-outlined {
+  background: rgba(255, 30, 30, 0.1);
+  border: 1px solid rgba(255, 75, 75, 0.6);
+  color: #ff6b6b;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 0.75rem 1.6rem;
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 15px rgba(255, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.btn-danger-delete-outlined:hover {
+  background: rgba(255, 30, 30, 0.25);
+  border-color: #ff4d4d;
+  color: #ffffff;
+  box-shadow: 0 0 25px rgba(255, 40, 40, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+/* ─── CENTERING LIQUID GLASS MODAL OVERLAY ──────────────────────── */
+.delete-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(2, 5, 15, 0.85);
+  backdrop-filter: blur(16px);
+  padding: 1.5rem;
+  animation: fadeInModal 0.25s ease-out forwards;
+}
+
+@keyframes fadeInModal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+._3d-liquid-modal {
+  width: 100%;
+  max-width: 480px;
+  background: rgba(13, 20, 38, 0.92);
+  border: 1px solid rgba(255, 75, 75, 0.4);
+  border-radius: 20px;
+  padding: 2rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(255, 40, 40, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  animation: popInModal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  color: #e6edf3;
+  box-sizing: border-box;
+}
+
+@keyframes popInModal {
+  from { transform: scale(0.92) translateY(10px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.delete-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 1rem;
+}
+
+.delete-modal-header h3 {
+  margin: 0;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #ff4d4d;
+  letter-spacing: 0.05em;
+}
+
+.delete-modal-body {
+  margin-bottom: 1.75rem;
+}
+
+.delete-warning-bold {
+  font-weight: 700;
+  color: #ff6b6b;
+  font-size: 1rem;
+  margin: 0.5rem 0;
+}
+
+.delete-warning-sub {
+  color: #94a3b8;
+  font-size: 0.92rem;
+  margin: 0.5rem 0;
+}
+
+.delete-removal-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  padding: 0.85rem 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.delete-removal-list li {
+  font-size: 0.9rem;
+  color: #cbd5e1;
+  padding: 0.25rem 0;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.delete-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.delete-input-group label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.delete-password-wrapper {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.delete-password-input {
+  width: 100%;
+  background: rgba(5, 10, 25, 0.7);
+  border: 1px solid rgba(0, 220, 255, 0.3);
+  border-radius: 10px;
+  padding: 0.75rem 2.8rem 0.75rem 1rem;
+  color: #ffffff;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.delete-password-input:focus {
+  border-color: #ff4d4d;
+  box-shadow: 0 0 15px rgba(255, 77, 77, 0.3);
+}
+
+.delete-password-toggle-btn {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: rgba(196, 235, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 6px;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.delete-password-toggle-btn:hover {
+  color: #ff4d4d;
+  transform: scale(1.1);
+}
+
+.delete-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.delete-checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #ff4d4d;
+  cursor: pointer;
+}
+
+.delete-checkbox-label span {
+  font-size: 0.88rem;
+  color: #cbd5e1;
+}
+
+.delete-modal-error {
+  background: rgba(255, 30, 30, 0.15);
+  border: 1px solid rgba(255, 80, 80, 0.5);
+  color: #ff8080;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  font-size: 0.88rem;
+  margin-bottom: 1rem;
+}
+
+.delete-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+}
+
+.modal-btn-cancel {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #cbd5e1;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.65rem 1.4rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modal-btn-cancel:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.modal-btn-danger {
+  background: linear-gradient(135deg, #e60000 0%, #b30000 100%);
+  border: 1px solid #ff4d4d;
+  color: #ffffff;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 0.65rem 1.4rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 15px rgba(255, 0, 0, 0.3);
+}
+
+.modal-btn-danger:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ff1a1a 0%, #cc0000 100%);
+  box-shadow: 0 0 25px rgba(255, 30, 30, 0.6);
+  transform: translateY(-1px);
+}
+
+.modal-btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }

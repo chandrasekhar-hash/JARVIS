@@ -8,6 +8,8 @@ from typing import Optional
 from identity.identity_manager import identity_manager
 from identity.identity_storage import identity_storage
 from identity.password_utils import hash_password, verify_password
+from identity.email_service import email_service
+from identity.otp_service import otp_service
 from identity.jwt_manager import (
     create_jwt_token, 
     verify_jwt_token, 
@@ -24,10 +26,19 @@ EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 # Special characters regex
 SPECIAL_CHAR_REGEX = re.compile(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]")
 
+class RequestOtpRequest(BaseModel):
+    username: str
+    email: str
+
+class VerifyOtpRequest(BaseModel):
+    email: str
+    otp: str
+
 class RegisterRequest(BaseModel):
     username: str
     email: str
     password: str
+    verification_token: str
     display_name: Optional[str] = None
 
 class LoginRequest(BaseModel):
@@ -37,6 +48,60 @@ class LoginRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: str
+
+@router.post("/auth/register/request-otp")
+def request_registration_otp(body: RequestOtpRequest):
+    clean_username = body.username.strip()
+    clean_email = body.email.strip().lower()
+
+    if not clean_username:
+        raise HTTPException(status_code=400, detail="Username is required.")
+
+    if not clean_email or not EMAIL_REGEX.match(clean_email):
+        raise HTTPException(status_code=400, detail="Enter a valid email address.")
+
+    # Duplicate username check
+    if identity_storage.get_user_credential_by_username(clean_username):
+        raise HTTPException(status_code=400, detail="This username is already taken.")
+
+    # Duplicate email check
+    if identity_storage.get_user_credential_by_email(clean_email):
+        raise HTTPException(status_code=400, detail="An account with this email already exists.")
+
+    # Generate cryptographically secure OTP
+    otp, err = otp_service.generate_registration_otp(clean_email)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+
+    # Send OTP via Brevo API
+    try:
+        email_service.send_registration_otp(clean_email, otp)
+    except Exception as e:
+        logger.error(f"[Auth] Failed to send registration OTP to {clean_email}: {e}")
+        raise HTTPException(status_code=500, detail="Unable to send verification code. Please try again.")
+
+    return {
+        "status": "pending_verification",
+        "message": f"Verification code sent successfully to {clean_email}."
+    }
+
+@router.post("/auth/register/verify-otp")
+def verify_registration_otp(body: VerifyOtpRequest):
+    clean_email = body.email.strip().lower()
+    clean_otp = body.otp.strip()
+
+    if not clean_email or not clean_otp:
+        raise HTTPException(status_code=400, detail="Email and verification code are required.")
+
+    success, token, err = otp_service.verify_registration_otp(clean_email, clean_otp)
+    if not success or not token:
+        raise HTTPException(status_code=400, detail=err or "Invalid verification code.")
+
+    return {
+        "status": "success",
+        "message": "Email verified.",
+        "verification_token": token
+    }
 
 @router.post("/auth/register")
 def register_user(body: RegisterRequest):
@@ -52,24 +117,26 @@ def register_user(body: RegisterRequest):
     if not clean_email or not EMAIL_REGEX.match(clean_email):
         raise HTTPException(status_code=400, detail="Enter a valid email address.")
 
-    # 3. Password requirements validation (Min 8 chars, 1 uppercase, 1 special char)
+    # 3. Password requirements validation
     if len(password) < 8 or not re.search(r"[A-Z]", password) or not SPECIAL_CHAR_REGEX.search(password):
         raise HTTPException(status_code=400, detail="Password does not meet the security requirements.")
 
-    # 4. Duplicate username check
-    existing_user_by_name = identity_storage.get_user_credential_by_username(clean_username)
-    if existing_user_by_name:
+    # 4. Verify token
+    if not body.verification_token or not otp_service.consume_verification_token(body.verification_token, clean_email):
+        raise HTTPException(status_code=400, detail="Email verification has expired or is invalid. Please verify your email again.")
+
+    # 5. Duplicate username check
+    if identity_storage.get_user_credential_by_username(clean_username):
         raise HTTPException(status_code=400, detail="This username is already taken.")
 
-    # 5. Duplicate email check
-    existing_user_by_email = identity_storage.get_user_credential_by_email(clean_email)
-    if existing_user_by_email:
+    # 6. Duplicate email check
+    if identity_storage.get_user_credential_by_email(clean_email):
         raise HTTPException(status_code=400, detail="An account with this email already exists.")
 
-    # 6. Secure Password Hashing (PBKDF2-HMAC-SHA256)
+    # 7. Secure Password Hashing (PBKDF2-HMAC-SHA256)
     hashed_pwd = hash_password(password)
 
-    # 7. Save user credential with is_verified=1 so user is active & verified
+    # 8. Save user credential with is_verified=1
     user_record = identity_storage.save_user_credential(
         username=clean_username,
         email=clean_email,
@@ -150,9 +217,113 @@ def login_user(body: LoginRequest, response: Response):
         }
     }
 
-@router.post("/auth/forgot-password")
-def forgot_password(body: ForgotPasswordRequest):
-    raise HTTPException(status_code=400, detail="Account recovery is currently unavailable.")
+class ForgotPasswordRequestOtpRequest(BaseModel):
+    identifier: str
+
+class ForgotPasswordVerifyOtpRequest(BaseModel):
+    identifier: str
+    otp: str
+
+class ForgotPasswordResetPasswordRequest(BaseModel):
+    identifier: str
+    reset_token: str
+    new_password: str
+
+@router.post("/auth/forgot-password/request-otp")
+def forgot_password_request_otp(body: ForgotPasswordRequestOtpRequest):
+    clean_id = body.identifier.strip().lower()
+    if not clean_id:
+        raise HTTPException(status_code=400, detail="Please enter your email or username.")
+
+    # Locate account by username or email
+    user = identity_storage.get_user_credential_by_identifier(clean_id)
+
+    # ANTI-ENUMERATION: Return generic message if user not found, without exposing account non-existence
+    if not user or not user.get("email"):
+        return {
+            "status": "pending_verification",
+            "message": "If an account exists, a verification code has been sent."
+        }
+
+    target_email = user["email"].strip().lower()
+
+    # Generate cryptographically secure OTP for password reset
+    otp, err = otp_service.generate_password_reset_otp(target_email)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+
+    # Dispatch OTP to the user's actual registered email address using Brevo API
+    try:
+        email_service.send_password_reset_otp(target_email, otp)
+    except Exception as e:
+        logger.error(f"[Auth] Failed to send password reset OTP to {target_email}: {e}")
+        raise HTTPException(status_code=500, detail="Unable to send verification code. Please try again.")
+
+    return {
+        "status": "pending_verification",
+        "message": "If an account exists, a verification code has been sent."
+    }
+
+@router.post("/auth/forgot-password/verify-otp")
+def forgot_password_verify_otp(body: ForgotPasswordVerifyOtpRequest):
+    clean_id = body.identifier.strip().lower()
+    clean_otp = body.otp.strip()
+
+    if not clean_id or not clean_otp:
+        raise HTTPException(status_code=400, detail="Identifier and verification code are required.")
+
+    user = identity_storage.get_user_credential_by_identifier(clean_id)
+    if not user or not user.get("email"):
+        raise HTTPException(status_code=400, detail="Invalid verification code.")
+
+    target_email = user["email"].strip().lower()
+
+    success, reset_token, err = otp_service.verify_password_reset_otp(target_email, clean_otp)
+    if not success or not reset_token:
+        raise HTTPException(status_code=400, detail=err or "Invalid verification code.")
+
+    return {
+        "status": "success",
+        "message": "Identity verified.",
+        "reset_token": reset_token
+    }
+
+@router.post("/auth/forgot-password/reset-password")
+def forgot_password_reset_password(body: ForgotPasswordResetPasswordRequest):
+    clean_id = body.identifier.strip().lower()
+    new_password = body.new_password
+
+    if not clean_id or not body.reset_token or not new_password:
+        raise HTTPException(status_code=400, detail="All fields are required.")
+
+    if len(new_password) < 8 or not re.search(r"[A-Z]", new_password) or not SPECIAL_CHAR_REGEX.search(new_password):
+        raise HTTPException(status_code=400, detail="Password does not meet the security requirements.")
+
+    user = identity_storage.get_user_credential_by_identifier(clean_id)
+    if not user or not user.get("email"):
+        raise HTTPException(status_code=400, detail="Unable to reset password.")
+
+    target_email = user["email"].strip().lower()
+
+    # Consume single-use reset token
+    if not otp_service.consume_password_reset_token(body.reset_token, target_email):
+        raise HTTPException(status_code=400, detail="Password reset token is invalid or has expired. Please verify your identity again.")
+
+    # Hash new password
+    hashed_pwd = hash_password(new_password)
+
+    # Update user password in database
+    updated = identity_storage.update_user_password(target_email, hashed_pwd)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Failed to update password.")
+
+    # Invalidate all existing sessions and refresh tokens for this user
+    identity_storage.revoke_all_user_sessions(target_email)
+
+    return {
+        "status": "success",
+        "message": "Your password has been updated successfully. Please log in."
+    }
 
 @router.post("/session/refresh")
 def refresh_session_auth(request: Request, response: Response):
@@ -261,6 +432,90 @@ def update_profile(body: UpdateProfileRequest, request: Request):
             "email": result["email"],
             "display_name": result.get("display_name", result["username"])
         }
+    }
+
+class DeleteAccountRequest(BaseModel):
+    password: str
+
+@router.post("/account/delete")
+@router.delete("/account/delete")
+@router.post("/auth/delete-account")
+@router.delete("/auth/delete-account")
+@router.post("/auth/account")
+@router.delete("/auth/account")
+@router.post("/account")
+@router.delete("/account")
+def delete_account(body: DeleteAccountRequest, request: Request, response: Response):
+    """
+    Permanently deletes the authenticated user's account, profile, sessions, and data.
+    Requires password re-verification.
+    """
+    access_token = request.cookies.get("jarvis_access_token")
+    if not access_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            access_token = auth_header.split(" ", 1)[1]
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not authenticated. Session missing.")
+
+    payload = verify_jwt_token(access_token)
+    if not payload or payload.get("type") != "access":
+        raise HTTPException(status_code=401, detail="Invalid or expired session. Please log in again.")
+
+    current_username = payload.get("sub")
+    if not current_username:
+        raise HTTPException(status_code=401, detail="Invalid session payload.")
+
+    # Robust user credential lookup by identifier, username, email, or profile
+    user_record = identity_storage.get_user_credential_by_identifier(current_username)
+    if not user_record:
+        user_record = identity_storage.get_user_credential_by_username(current_username)
+    if not user_record:
+        user_record = identity_storage.get_user_credential_by_email(current_username)
+
+    if not user_record:
+        try:
+            local_prof = identity_manager.get_user_profile()
+            if local_prof and local_prof.email:
+                user_record = identity_storage.get_user_credential_by_email(local_prof.email)
+        except Exception:
+            pass
+
+    # Fallback: if single user exists in user_credentials table
+    if not user_record:
+        try:
+            with identity_storage._get_connection() as conn:
+                rows = conn.execute("SELECT * FROM user_credentials").fetchall()
+                if len(rows) == 1:
+                    user_record = dict(rows[0])
+        except Exception:
+            pass
+
+    if not user_record:
+        raise HTTPException(status_code=400, detail="Account record not found. Please log in again.")
+
+    provided_password = body.password
+    if not provided_password or not verify_password(provided_password, user_record["password_hash"]):
+        raise HTTPException(status_code=400, detail="Incorrect password.")
+
+    user_email = user_record["email"]
+    username = user_record["username"]
+
+    # Revoke sessions & remove credentials and user profiles
+    identity_storage.revoke_all_user_sessions(user_email)
+    identity_storage.revoke_all_user_sessions(username)
+    identity_storage.delete_user_credential_by_username(username)
+    identity_storage.delete_user_credential_by_email(user_email)
+
+    # Clear HTTP cookies
+    response.delete_cookie(key="jarvis_access_token")
+    response.delete_cookie(key="jarvis_refresh_token")
+
+    logger.info(f"[Auth] Permanently deleted account for user '{username}' ({user_email})")
+
+    return {
+        "status": "success",
+        "message": "Account permanently deleted."
     }
 
 @router.post("/session/logout")

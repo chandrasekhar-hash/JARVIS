@@ -504,6 +504,24 @@ class SQLiteIdentityStorage:
             conn.commit()
             return cursor.rowcount > 0
 
+    def delete_user_credential_by_username(self, username: str) -> bool:
+        clean_username = username.strip().lower()
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM user_profiles WHERE LOWER(user_id) = ? OR LOWER(display_name) = ?", (clean_username, clean_username))
+            conn.execute("DELETE FROM session_tokens WHERE LOWER(user_id) = ?", (clean_username,))
+            cursor = conn.execute("DELETE FROM user_credentials WHERE LOWER(username) = ?", (clean_username,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def delete_user_credential_by_email(self, email: str) -> bool:
+        clean_email = email.strip().lower()
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM user_profiles WHERE LOWER(email) = ?", (clean_email,))
+            conn.execute("DELETE FROM session_tokens WHERE user_id IN (SELECT username FROM user_credentials WHERE LOWER(email) = ?)", (clean_email,))
+            cursor = conn.execute("DELETE FROM user_credentials WHERE LOWER(email) = ?", (clean_email,))
+            conn.commit()
+            return cursor.rowcount > 0
+
     def update_user_profile_fields(self, username: str, display_name: str = None, new_username: str = None) -> Optional[Dict[str, Any]]:
         """Update display_name and/or username for a user. Returns updated record or None on failure."""
         clean_username = username.strip().lower()
