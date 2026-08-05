@@ -5,6 +5,15 @@ import { listen } from '@tauri-apps/api/event';
 import './Terminal.css';
 import { formatTranscript } from '../services/transcriptFormatter';
 
+// Vision Intelligence V1 Attachment Configuration
+export const ATTACHMENT_CONFIG = {
+  ALLOWED_TYPES: ['image/jpeg', 'image/png', 'image/webp'],
+  ALLOWED_EXTENSIONS: ['.jpg', '.jpeg', '.png', '.webp'],
+  MAX_FILE_SIZE_BYTES: 10 * 1024 * 1024,
+  MAX_FILE_SIZE_MB: 10,
+  MAX_ATTACHMENTS_PER_MESSAGE: 5,
+};
+
 const THEME_COLORS = {
   green: { hex: '#00ff66', glow: 'rgba(0, 255, 102, 0.45)' },
   cyan: { hex: '#00e5ff', glow: 'rgba(0, 229, 255, 0.45)' },
@@ -295,9 +304,183 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     }, 10000);
   };
 
+  /* ── V1 Image Input Layer State ── */
+  const [attachments, setAttachments] = useState([]);
+  const [dragOver, setDragOver] = useState(false);
+  const [attachmentToast, setAttachmentToast] = useState(null);
+  const fileInputRef = useRef(null);
+  const attachmentsRef = useRef([]);
+  const recentVisionContextRef = useRef([]);
+
+  useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+
+  const revokeAttachmentUrl = (item) => {
+    if (item && item.previewUrl) {
+      try {
+        URL.revokeObjectURL(item.previewUrl);
+      } catch (_) {}
+    }
+  };
+
+  const clearAllAttachments = () => {
+    setAttachments((prev) => {
+      prev.forEach(revokeAttachmentUrl);
+      return [];
+    });
+  };
+
+  const removeAttachment = (id) => {
+    setAttachments((prev) => {
+      const target = prev.find((item) => item.id === id);
+      if (target) {
+        revokeAttachmentUrl(target);
+      }
+      return prev.filter((item) => item.id !== id);
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      attachmentsRef.current.forEach(revokeAttachmentUrl);
+    };
+  }, []);
+
+  const showAttachmentToast = (message, type = 'error') => {
+    setAttachmentToast({ message, type });
+    setTimeout(() => {
+      setAttachmentToast(null);
+    }, 4000);
+  };
+
+  const validateAndAddFiles = (filesList) => {
+    if (!filesList || filesList.length === 0) return;
+
+    const files = Array.from(filesList);
+    const validNewItems = [];
+    let currentCount = attachmentsRef.current.length;
+
+    for (const file of files) {
+      const mimeValid = ATTACHMENT_CONFIG.ALLOWED_TYPES.includes(file.type);
+      const ext = '.' + (file.name ? file.name.split('.').pop().toLowerCase() : '');
+      const extValid = ATTACHMENT_CONFIG.ALLOWED_EXTENSIONS.includes(ext);
+
+      if (!mimeValid && !extValid) {
+        showAttachmentToast('Unsupported image format.');
+        continue;
+      }
+
+      if (file.size > ATTACHMENT_CONFIG.MAX_FILE_SIZE_BYTES) {
+        showAttachmentToast(`Image exceeds the ${ATTACHMENT_CONFIG.MAX_FILE_SIZE_MB} MB limit.`);
+        continue;
+      }
+
+      if (currentCount >= ATTACHMENT_CONFIG.MAX_ATTACHMENTS_PER_MESSAGE) {
+        showAttachmentToast(`Maximum ${ATTACHMENT_CONFIG.MAX_ATTACHMENTS_PER_MESSAGE} images per message.`);
+        break;
+      }
+
+      const newItem = {
+        id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        file,
+        name: file.name || 'image.png',
+        type: file.type || 'image/png',
+        size: file.size,
+        previewUrl: URL.createObjectURL(file),
+      };
+
+      validNewItems.push(newItem);
+      currentCount += 1;
+    }
+
+    if (validNewItems.length > 0) {
+      setAttachments((prev) => [...prev, ...validNewItems]);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      validateAndAddFiles(e.target.files);
+      e.target.value = '';
+    }
+  };
+
+  const triggerFilePicker = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+      setDragOver(true);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragOver && e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+      setDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget && e.currentTarget.contains && e.currentTarget.contains(e.relatedTarget)) return;
+    setDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const imageFiles = Array.from(e.dataTransfer.files).filter((f) => {
+        const ext = '.' + (f.name ? f.name.split('.').pop().toLowerCase() : '');
+        return ATTACHMENT_CONFIG.ALLOWED_TYPES.includes(f.type) || ATTACHMENT_CONFIG.ALLOWED_EXTENSIONS.includes(ext);
+      });
+
+      if (imageFiles.length > 0) {
+        validateAndAddFiles(imageFiles);
+      } else {
+        showAttachmentToast('Unsupported image format.');
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleGlobalPaste = (e) => {
+      if (!e.clipboardData) return;
+      const items = Array.from(e.clipboardData.items || []);
+      const imageItems = items.filter((item) => item.type && item.type.startsWith('image/'));
+
+      if (imageItems.length > 0) {
+        e.preventDefault();
+        const imageFiles = imageItems
+          .map((item) => item.getAsFile())
+          .filter((file) => file !== null);
+        validateAndAddFiles(imageFiles);
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => {
+      window.removeEventListener('paste', handleGlobalPaste);
+    };
+  }, []);
+
   const handleVoiceHubClick = (e) => {
     if (e.target.closest('.terminal-edit-input') || 
         e.target.closest('.terminal-continue-btn') || 
+        e.target.closest('.terminal-attach-btn') || 
+        e.target.closest('.terminal-attachments-bar') || 
         e.target.closest('.searchable-dropdown-container') || 
         e.target.closest('.terminal-minimize-btn') ||
         e.target.closest('.terminal-status-indicator')) return;
@@ -315,12 +498,17 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
   const autoClearTimer = useRef(null);
 
   // Simplified Wake Word States & References
-  const [activeSecondsLeft, setActiveSecondsLeft] = useState(0);
   const activeCountdownIntervalRef = useRef(null);
 
   const recognitionRef  = useRef(null);
   const restartTimer    = useRef(null);
   const startingRef     = useRef(false);
+
+  // Keep a ref so handlers registered outside React (e.g. SpeechRecognition events)
+  // always read the latest settings without needing re-binding
+  const settingsRef = useRef(settings);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
+
   const stoppedRef      = useRef(false);
   const startTimeRef    = useRef(0);
 
@@ -460,7 +648,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
 
     // Strip punctuation & normalise whitespace — used for detection only (not sent to LLM)
     const normalize = (str) =>
-      str.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?'"]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+      str.replace(/[.,/#!$%^&*;:{}=\-_`~()?'"]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 
     const normText = normalize(originalTrimmed);
 
@@ -668,7 +856,7 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     const textToMatch = nextChunk.text ? nextChunk.text.trim() : "";
 
     if (textToMatch) {
-      const cleanText = (str) => str.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "").replace(/\s+/g, "").toLowerCase();
+      const cleanText = (str) => str.replace(/[.,/#!$%^&*;:{}=\-_`~()?]/g, "").replace(/\s+/g, "").toLowerCase();
       const cleanNextText = cleanText(textToMatch);
       const cleanLlmResponse = cleanText(llmResponseRef.current || "");
 
@@ -1109,6 +1297,115 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     }
   };
 
+  const speakVisionResponse = async (responseText) => {
+    if (!responseText) return;
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const response = await fetch(`${baseUrl}/api/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: responseText,
+          voice: voiceGender,
+          language: voiceLanguage && voiceLanguage !== 'auto' ? voiceLanguage : 'english'
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.url) {
+          playAssistantAudio(data.url, responseText);
+        }
+      }
+    } catch (e) {
+      console.warn("[Vision TTS Error]", e);
+    }
+  };
+
+  const sendVisionRequest = async (promptQuery) => {
+    if (isRequestActiveRef.current) return;
+    if (attachmentsRef.current.length === 0) return;
+
+    const currentAttachments = [...attachmentsRef.current];
+    const trimmedPrompt = (promptQuery || '').trim();
+
+    stopAllAudio();
+    if (activeReaderRef.current) {
+      try { activeReaderRef.current.cancel(); } catch (_) {}
+      activeReaderRef.current = null;
+    }
+    if (activeRequestControllerRef.current) {
+      activeRequestControllerRef.current.abort();
+      activeRequestControllerRef.current = null;
+    }
+
+    isRequestActiveRef.current = true;
+    clearActiveTimeout();
+    updateStatus('processing');
+
+    const controller = new AbortController();
+    activeRequestControllerRef.current = controller;
+
+    try {
+      const formData = new FormData();
+      if (trimmedPrompt) {
+        formData.append('prompt', trimmedPrompt);
+      }
+
+      if (recentVisionContextRef.current && recentVisionContextRef.current.length > 0) {
+        formData.append('conversation_context', JSON.stringify(recentVisionContextRef.current));
+      }
+
+      currentAttachments.forEach((att) => {
+        formData.append('images', att.file, att.name);
+      });
+
+      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const response = await fetch(`${baseUrl}/api/vision/analyze`, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Vision analysis failed.');
+      }
+
+      // Update contextual visual summary for follow-up turns
+      if (!recentVisionContextRef.current) recentVisionContextRef.current = [];
+      if (trimmedPrompt) {
+        recentVisionContextRef.current.push({ role: 'user', content: trimmedPrompt });
+      }
+      if (data.visual_summary) {
+        recentVisionContextRef.current.push({ role: 'assistant', content: data.visual_summary });
+      }
+      if (recentVisionContextRef.current.length > 4) {
+        recentVisionContextRef.current = recentVisionContextRef.current.slice(-4);
+      }
+
+      updateStatus('responding');
+      updateResponseState('visible');
+      setLlmResponse(data.text);
+
+      // On Success: Clear attachments & revoke preview URLs
+      clearAllAttachments();
+
+      // Speak vision answer via existing TTS pipeline
+      speakVisionResponse(data.text);
+
+      scheduleAutoClear();
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      console.error('[Vision API Error]', err);
+      // On Failure: Preserve attachments so user can retry!
+      showAttachmentToast(err.message || 'Vision analysis failed. Please try again.', 'error');
+      updateStatus('standby');
+    } finally {
+      isRequestActiveRef.current = false;
+    }
+  };
+
   const processCommand = (command) => {
     fetchGroqResponse(command);
   };
@@ -1131,6 +1428,12 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
     setEditableText('');
     setFormattedFinalText('');
     setFormattedInterimText('');
+
+    // If images are attached, route to Vision Intelligence
+    if (attachmentsRef.current.length > 0) {
+      sendVisionRequest(fullInput);
+      return;
+    }
 
     if (!fullInput) {
       if (statusRef.current === 'active' || statusRef.current === 'listening') {
@@ -1628,7 +1931,84 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
             paddingTop: minimized ? '0px' : '',
             paddingBottom: minimized ? '0px' : ''
           }}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
+          {/* Attachment Toast Notification */}
+          {attachmentToast && (
+            <div className={`terminal-attachment-toast ${attachmentToast.type}`}>
+              <span className="toast-icon">{attachmentToast.type === 'error' ? '⚠️' : 'ℹ️'}</span>
+              <span className="toast-msg">{attachmentToast.message}</span>
+            </div>
+          )}
+
+          {/* Drag & Drop Overlay */}
+          {dragOver && (
+            <div className="terminal-drop-overlay">
+              <div className="terminal-drop-overlay-content">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="36" height="36">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <span>DROP IMAGES HERE</span>
+              </div>
+            </div>
+          )}
+
+          {/* Hidden File Input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
+
+          {/* Attachment Previews Bar */}
+          {attachments.length > 0 && (
+            <div className="terminal-attachments-bar">
+              <div className="terminal-attachments-scroll">
+                {attachments.map((att) => (
+                  <div key={att.id} className="terminal-attachment-card">
+                    <img src={att.previewUrl} alt={att.name} className="terminal-attachment-img" />
+                    <button
+                      type="button"
+                      className="terminal-attachment-remove-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeAttachment(att.id);
+                      }}
+                      aria-label="Remove image"
+                      title="Remove image"
+                    >
+                      ×
+                    </button>
+                    <span className="terminal-attachment-name" title={att.name}>
+                      {att.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {attachments.length > 1 && (
+                <button
+                  type="button"
+                  className="terminal-attachments-clear-all-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearAllAttachments();
+                  }}
+                  title="Clear all attachments"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="terminal-prompt-prefix">
             {isEditingText ? (
               <span className="terminal-prompt-override">[ OVERRIDE ] &gt;</span>
@@ -1636,6 +2016,18 @@ export default function Terminal({ terminalSettings, setTerminalSettings }) {
               <>{assistantName} &gt;</>
             )}
           </div>
+
+          <button
+            type="button"
+            className="terminal-attach-btn"
+            onClick={triggerFilePicker}
+            aria-label="Attach image"
+            title="Attach image"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path>
+            </svg>
+          </button>
 
           <div 
             className="terminal-live-container"

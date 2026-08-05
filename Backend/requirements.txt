@@ -3,7 +3,7 @@ uvicorn
 edge-tts
 httpx
 python-dotenv
-google-generativeai
+google-genai
 psutil
 beautifulsoup4
 pillow

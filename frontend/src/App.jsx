@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import Navbar from './component/Navbar';
 import Bob from './component/bob';
 import Terminal from './component/Terminal';
 import Status from './component/Status';
 import Widgets from './component/Widgets';
-import UserProfileView from './component/UserProfileView';
 import { AssistantConfigProvider } from './context/AssistantConfigContext';
 
 // Product 1.11 AXL Imports
@@ -14,10 +13,13 @@ import { AXLAuthProvider } from './axl/context/AXLAuthContext';
 import { AXLFeatureFlagProvider } from './axl/context/AXLFeatureFlagContext';
 import { AXLStartupProvider } from './axl/context/AXLStartupContext';
 import SplashScreen from './axl/components/SplashScreen';
-import AuthView from './axl/components/AuthView';
-import SetupWizard from './axl/components/SetupWizard';
-import MaintenanceView from './axl/components/MaintenanceView';
-import DiagnosticsView from './axl/components/DiagnosticsView';
+
+// Code-split heavy views with React.lazy
+const UserProfileView = lazy(() => import('./component/UserProfileView'));
+const AuthView = lazy(() => import('./axl/components/AuthView'));
+const SetupWizard = lazy(() => import('./axl/components/SetupWizard'));
+const MaintenanceView = lazy(() => import('./axl/components/MaintenanceView'));
+const DiagnosticsView = lazy(() => import('./axl/components/DiagnosticsView'));
 
 import './App.css';
 
@@ -212,7 +214,9 @@ export default function App() {
           <AXLAuthProvider>
             <AXLFeatureFlagProvider>
               <AXLStartupProvider>
-                <AppContent />
+                <Suspense fallback={<div style={{ color: '#00ff66', padding: 20 }}>Initializing...</div>}>
+                  <AppContent />
+                </Suspense>
               </AXLStartupProvider>
             </AXLFeatureFlagProvider>
           </AXLAuthProvider>

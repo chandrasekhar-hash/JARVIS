@@ -26,6 +26,8 @@ from api.autonomous import router as autonomous_router
 from api.auth import router as auth_router
 from api.health import router as health_router
 from api.diagnostics import router as diagnostics_router
+from api.vision import router as vision_router
+from api.ocr import router as ocr_router
 from axl.boot_manager import system_boot_manager
 
 app = FastAPI(title="J.A.R.V.I.S. Core Backend API")
@@ -33,6 +35,8 @@ app.include_router(autonomous_router)
 app.include_router(auth_router)
 app.include_router(health_router)
 app.include_router(diagnostics_router)
+app.include_router(vision_router)
+app.include_router(ocr_router)
 
 
 def shutdown_handler():

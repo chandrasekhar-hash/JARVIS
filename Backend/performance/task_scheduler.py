@@ -3,6 +3,7 @@ Priority Task Scheduler for J.A.R.V.I.S. Phase V1.7.
 Manages prioritized async task scheduling, worker pool sizing, and task cancellation.
 """
 import asyncio
+import inspect
 import logging
 from typing import Dict, Optional, Callable, Any
 from .interfaces import ITaskScheduler
@@ -40,7 +41,7 @@ class TaskScheduler(ITaskScheduler):
 
         async def _wrapper():
             try:
-                if asyncio.iscoroutinefunction(coro_fn):
+                if inspect.iscoroutinefunction(coro_fn):
                     res = await coro_fn()
                 else:
                     res = coro_fn()

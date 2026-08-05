@@ -2,6 +2,7 @@
 Exponential Backoff Retry Manager for J.A.R.V.I.S. Phase V1.7.
 """
 import asyncio
+import inspect
 import logging
 from typing import Callable, Any, Optional
 from .interfaces import IRetryManager
@@ -37,7 +38,7 @@ class RetryManager(IRetryManager):
         for attempt in range(1, self.max_retries + 1):
             self._total_attempts += 1
             try:
-                if asyncio.iscoroutinefunction(fn):
+                if inspect.iscoroutinefunction(fn):
                     res = await fn(*args, **kwargs)
                 else:
                     res = fn(*args, **kwargs)
