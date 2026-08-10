@@ -326,7 +326,7 @@ def forgot_password_reset_password(body: ForgotPasswordResetPasswordRequest):
     }
 
 @router.post("/session/refresh")
-def refresh_session_auth(request: Request, response: Response):
+async def refresh_session_auth(request: Request, response: Response):
     refresh_token = request.cookies.get("jarvis_refresh_token")
     if not refresh_token:
         auth_header = request.headers.get("Authorization")
@@ -334,7 +334,22 @@ def refresh_session_auth(request: Request, response: Response):
             refresh_token = auth_header.split(" ", 1)[1]
 
     if not refresh_token:
+        try:
+            body = await request.json()
+            refresh_token = body.get("refresh_token")
+        except Exception:
+            pass
+
+    if not refresh_token:
         raise HTTPException(status_code=401, detail="No refresh token provided")
+
+    # Local session_manager fallback for local tokens (rtk_...)
+    if refresh_token.startswith("rtk_") or refresh_token.startswith("sess_"):
+        from identity.session_manager import session_manager
+        success, token_pair, err = session_manager.refresh_session(refresh_token)
+        if not success or not token_pair:
+            raise HTTPException(status_code=401, detail=err or "Token refresh failed")
+        return {"status": "success", "token_pair": token_pair.model_dump()}
 
     payload = verify_jwt_token(refresh_token)
     if not payload or payload.get("type") != "refresh":

@@ -14,6 +14,7 @@ class TestIdentityAndSecurityLayer(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         self.user, self.device = identity_manager.initialize()
+        identity_manager.update_device_trust_state(DeviceTrustState.TRUSTED)
 
     def test_01_ed25519_crypto_utils(self):
         priv_pem, pub_pem, fingerprint = crypto_utils.get_or_create_ed25519_keypair()

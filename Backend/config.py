@@ -33,3 +33,20 @@ HOST = os.getenv("HOST", "0.0.0.0")
 CORS_ORIGINS_RAW = os.getenv("CORS_ORIGINS", "*")
 CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_RAW.split(",") if origin.strip()]
 
+# Web Search Intelligence Configuration (I2.2 V1)
+WEB_SEARCH_PROVIDER = os.getenv("WEB_SEARCH_PROVIDER", "duckduckgo")
+WEB_SEARCH_TIMEOUT_SECONDS = float(os.getenv("WEB_SEARCH_TIMEOUT_SECONDS", "10.0"))
+WEB_SEARCH_MAX_RESULTS = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "10"))
+WEB_SEARCH_ENABLED = os.getenv("WEB_SEARCH_ENABLED", "true").lower() in ("true", "1", "yes")
+
+# Webpage Retrieval & Content Intelligence Configuration (I2.2 V2)
+WEB_FETCH_ENABLED = os.getenv("WEB_FETCH_ENABLED", "true").lower() in ("true", "1", "yes")
+WEB_FETCH_TIMEOUT_SECONDS = float(os.getenv("WEB_FETCH_TIMEOUT_SECONDS", "10.0"))
+WEB_FETCH_MAX_BYTES = int(os.getenv("WEB_FETCH_MAX_BYTES", "3000000")) # ~3MB
+WEB_FETCH_MAX_REDIRECTS = int(os.getenv("WEB_FETCH_MAX_REDIRECTS", "5"))
+WEB_FETCH_MAX_PAGES = int(os.getenv("WEB_FETCH_MAX_PAGES", "3"))
+WEB_FETCH_CONCURRENCY = int(os.getenv("WEB_FETCH_CONCURRENCY", "3"))
+WEB_FETCH_CACHE_ENABLED = os.getenv("WEB_FETCH_CACHE_ENABLED", "true").lower() in ("true", "1", "yes")
+WEB_FETCH_CACHE_TTL_SECONDS = int(os.getenv("WEB_FETCH_CACHE_TTL_SECONDS", "300"))
+
+

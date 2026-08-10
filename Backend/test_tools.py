@@ -42,6 +42,9 @@ def test_classifier():
         print(f"Query: '{q}' -> Classified match: {res}")
     print("Classifier test passed.\n")
 
+import pytest
+
+@pytest.mark.asyncio
 async def test_filesystem():
     print("=== Testing Filesystem Tools ===")
     # 1. Desktop Items Count
